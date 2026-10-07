@@ -198,6 +198,45 @@ def check_urls_and_domains(engine):
     return problems
 
 
+def natid(nine):
+    """A valid Turkish national ID built from 9 digits (test numbers are generated, never real ones)."""
+    d = [int(c) for c in nine]
+    d10 = (sum(d[0:9:2]) * 7 - sum(d[1:8:2])) % 10
+    return nine + str(d10) + str((sum(d) + d10) % 10)
+
+
+def check_national_id(engine):
+    """Checksum-valid 11-digit IDs are masked; phones, wrong check digits and longer numbers are not."""
+    a, b = natid("123456789"), natid("987654321")
+    bad = a[:-1] + str((int(a[-1]) + 1) % 10)
+    m = engine.Mapper(store=None)
+    cases = [("PS D:\\CorpUser\\%s\\Desktop>" % a, r"^PS D:\\CorpUser\\NATIONAL_ID_1\\Desktop>$"),
+             ("tckn=%s, again %s" % (b, a), r"^tckn=NATIONAL_ID_2, again NATIONAL_ID_1$"),
+             ("phone 05321234567 wrong %s longer 9%s decimal %s.5" % (bad, a, a), r"NATIONAL_ID")]
+    problems = []
+    for i, (txt, want) in enumerate(cases):
+        out, _ = m.anonymize(txt)
+        found = re.search(want, out)
+        if (i < 2 and not found) or (i == 2 and found): problems.append("%r → %r" % (txt, out))
+        if m.restore(out)[0] != txt: problems.append("%r did not restore" % txt)
+    return problems
+
+
+def check_custom_terms(engine):
+    """Custom terms: case-insensitive, whole words and identifier parts, never inside a word."""
+    m = engine.Mapper(store=None)
+    m.set_custom(["acme", "net"])
+    txt = ("ACME report, AcmeUser, ACME_Prod, x_acme, X_ACME, acme2024, myAcme, acme.example.com, "
+           "network dotnet netApp NET_HOST")
+    want = ("CUSTOM_1 report, CUSTOM_2User, CUSTOM_1_Prod, x_CUSTOM_3, CUSTOM_4, CUSTOM_5, CUSTOM_6, "
+            "CUSTOM_3.example.com, network dotnet CUSTOM_7App CUSTOM_8_HOST")
+    out, _ = m.anonymize(txt)
+    problems = [] if out == want else ["custom terms:\n  got  %s\n  want %s" % (out, want)]
+    if m.restore(out)[0] != txt: problems.append("custom terms did not restore")
+    if m.anonymize(out)[0] != out: problems.append("masking twice changed the text")
+    return problems
+
+
 def check_classify(engine):
     m = engine.Mapper(store=None)
     m.anonymize("kemal@web01:~$ ping 10.10.10.20")
@@ -225,6 +264,7 @@ CHECKS = (("consistency across messages", check_consistency), ("Windows line end
           ("upgrade from older ledgers", check_legacy_upgrade), ("key formats (Stripe, GitHub, AWS…)", check_secret_formats),
           ("password keys in several languages", check_password_languages),
           ("token boundaries", check_token_boundaries), ("domain and URL tokens", check_urls_and_domains),
+          ("national ID (T.C. kimlik no)", check_national_id), ("custom terms", check_custom_terms),
           ("classify + restore", check_classify))
 
 

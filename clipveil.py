@@ -12,7 +12,7 @@ Hotkeys (needs pynput): Ctrl+Alt+A mask clipboard · Ctrl+Alt+R restore clipboar
 Ctrl+Alt+T toggle auto-watch.
 """
 
-import ipaddress, json, locale, os, re, sys, threading, time
+import ipaddress, json, locale, os, re, sys, threading, time, unicodedata
 
 try:
     import pyperclip
@@ -67,7 +67,7 @@ SYSTEM_USERS = set("""root admin administrator sa sys system postgres mysql mari
 
 # Older releases used these prefixes; they still restore and are upgraded on the next mask.
 LEGACY_PREFIXES = {"IP", "IPV6", "KULLANICI", "PROJE", "PAROLA", "ANAHTAR", "AYAR", "OZEL", "TARIH"}
-TOKEN_PREFIXES = ["IPV6_PRIV", "IPV6_PUB", "IP_PRIV", "IP_PUB", "CONTAINER", "PASSWORD", "PROJECT",
+TOKEN_PREFIXES = ["NATIONAL_ID", "IPV6_PRIV", "IPV6_PUB", "IP_PRIV", "IP_PUB", "CONTAINER", "PASSWORD", "PROJECT",
                   "DOMAIN", "SCHEMA", "SECRET", "CONFIG", "CUSTOM", "TOKEN", "IFACE", "HOST", "MAIL",
                   "JNDI", "USER", "DATE", "URL", "MAC", "DS", "DB"] + sorted(LEGACY_PREFIXES)
 # Not part of a word (MYDB_1) or of an UPPER_CASE identifier (DB_HOST_1); IP_1 ≠ IP_10.
@@ -77,10 +77,10 @@ def is_token(s): return bool(TOKEN_RE.fullmatch(s or ""))
 
 TYPE_PREFIX = {"mac": "MAC", "hostname": "HOST", "domain": "DOMAIN", "email": "MAIL", "date": "DATE",
                "custom": "CUSTOM", "user": "USER", "container": "CONTAINER", "project": "PROJECT",
-               "iface": "IFACE", "url": "URL"}
+               "iface": "IFACE", "url": "URL", "natid": "NATIONAL_ID"}
 
 # On overlap at the same start position the higher priority wins.
-PRIO = {"secret": 7, "custom": 6, "url": 5.5, "email": 5, "container": 4.8, "project": 4.7, "iface": 4.6,
+PRIO = {"secret": 7, "custom": 6, "url": 5.5, "natid": 5.2, "email": 5, "container": 4.8, "project": 4.7, "iface": 4.6,
         "user": 4.5, "domain": 4, "date": 3.5, "ipv6": 3, "ipv4": 2, "mac": 1, "hostname": 0.5,
         "config": 0.3}
 P_CONTEXT = 6.5
@@ -180,6 +180,13 @@ SECRET_PATTERNS = [
 SECRET_SKIP = {"null", "none", "nil", "true", "false", "undefined", "empty", "yes", "no", "required",
                "optional", "string", "hidden", "masked", "redacted", "bearer", "basic"}
 ENTROPY_RE = re.compile(r"(?<![\w+/=\-.])[A-Za-z0-9+/_\-]{20,}={0,2}(?![\w+/=\-.])")
+
+# ---- Turkish national ID (T.C. kimlik no): 11 digits validated by its two check digits ----
+NATID_RE = re.compile(r"(?<![0-9A-Za-z.,])[1-9][0-9]{10}(?![0-9A-Za-z]|[.,][0-9])")
+
+def _natid_ok(s):
+    d = [int(c) for c in s]
+    return ((sum(d[0:9:2]) * 7 - sum(d[1:8:2])) % 10 == d[9]) and sum(d[:10]) % 10 == d[10]
 
 # ---- connection strings: scheme://user:password@host:port/db ----
 CONN_RE = re.compile(r"\b(?P<scheme>[a-z][a-z0-9+.\-]*)://(?:(?P<user>[^\s:/@'\"]*)(?::(?P<pw>[^\s/@'\"]*))?@)?"
@@ -442,7 +449,7 @@ def _cfg_prefix(key):
        k in ("db", "catalog", "sid", "servicename", "instance", "instancename"): return "DB"
     return "CONFIG"
 
-ALL_TYPES = ("ipv4","ipv6","domain","url","hostname","mac","iface","email","user","container",
+ALL_TYPES = ("ipv4","ipv6","domain","url","hostname","mac","iface","email","user","natid","container",
              "config","secret","date","custom")
 # Dates are recognised but kept by default: timelines matter when debugging.
 DEFAULT_OFF = {"date"}
@@ -479,6 +486,31 @@ def _bounded(v):
 
 def _spread_re(v):
     return re.compile(r"(?<![A-Za-z0-9])" + re.escape(v) + r"(?![A-Za-z0-9])")
+
+def _token_fits(text, s, e):
+    """True if a token placed at text[s:e] would still be read as a token when restoring."""
+    lo = max(0, s - 2)
+    m = TOKEN_RE.match(text[lo:s] + "CUSTOM_9" + text[e:e + 1], s - lo)
+    return bool(m) and m.end() == s - lo + 8
+
+def _part_break(a, b):
+    """Is there an identifier-part boundary between characters a and b (snake_case, camelCase, letter|digit)?"""
+    if not (a.isalnum() and b.isalnum()): return True
+    if a.isalpha() != b.isalpha(): return True
+    return unicodedata.category(a) == "Ll" and unicodedata.category(b) == "Lu"
+
+def _custom_span(text, s, e):
+    """Where to mask a custom term found at text[s:e]: the term itself when it is a whole word or an
+    identifier part (ACME_Prod, AcmeUser), the whole identifier when a token there would not restore
+    (X_ACME, ACME2024), or None when the term sits inside a word (net in network)."""
+    if (s > 0 and not _part_break(text[s - 1], text[s])) or \
+       (e < len(text) and not _part_break(text[e - 1], text[e])):
+        return None
+    if _token_fits(text, s, e): return s, e
+    word = lambda ch: ch.isalnum() or ch == "_"
+    while s > 0 and word(text[s - 1]): s -= 1
+    while e < len(text) and word(text[e]): e += 1
+    return (s, e) if _token_fits(text, s, e) else None
 
 
 class Mapper:
@@ -737,10 +769,13 @@ class Mapper:
                 if local and repo != "<none>": add_local_image(pos, repo)
                 pos += len(line) + 1
 
-        # 8) custom terms
+        # 8) custom terms (case-insensitive) and national IDs
         for term in sorted([t for t in self.custom_terms if t], key=len, reverse=True):
-            for m in re.finditer(r"(?<![A-Za-z0-9_])" + re.escape(term) + r"(?![A-Za-z0-9_])", text, re.I):
-                add(m.start(), m.end(), m.group(0), "custom")
+            for m in re.finditer(re.escape(term), text, re.I):
+                span = _custom_span(text, m.start(), m.end())
+                if span: add(span[0], span[1], text[span[0]:span[1]], "custom")
+        for m in NATID_RE.finditer(text):
+            if _natid_ok(m.group(0)): add(m.start(), m.end(), m.group(0), "natid")
 
         # 9) dates
         for m in DATE_RE.finditer(text):
@@ -943,7 +978,8 @@ STRINGS = {
     "en": {
         "types": {"ipv4": "IPv4", "ipv6": "IPv6", "domain": "DNS", "url": "URL", "email": "Email", "mac": "MAC",
                   "hostname": "Host", "user": "User", "container": "Container", "project": "Project",
-                  "iface": "Interface", "config": "Config", "secret": "Secret", "date": "Date", "custom": "Custom"},
+                  "iface": "Interface", "config": "Config", "secret": "Secret", "date": "Date", "custom": "Custom",
+                  "natid": "National ID"},
         "tagline": "Masks logs and configs before they reach an AI assistant",
         "hotkeys": "Hotkeys", "mode": "Mode", "mode_smart": "Smart", "mode_mask": "Mask only",
         "mode_smart_on": "Mode: Smart — logs are masked, AI answers are restored",
@@ -1015,7 +1051,8 @@ STRINGS = {
     "tr": {
         "types": {"ipv4": "IPv4", "ipv6": "IPv6", "domain": "DNS", "url": "URL", "email": "E-posta", "mac": "MAC",
                   "hostname": "Host", "user": "Kullanıcı", "container": "Konteyner", "project": "Proje",
-                  "iface": "Arayüz", "config": "Config", "secret": "Parola", "date": "Tarih", "custom": "Özel"},
+                  "iface": "Arayüz", "config": "Config", "secret": "Parola", "date": "Tarih", "custom": "Özel",
+                  "natid": "T.C. kimlik"},
         "tagline": "Log ve config verilerini AI'a göndermeden önce maskeler",
         "hotkeys": "Kısayollar", "mode": "Yön", "mode_smart": "Akıllı", "mode_mask": "Sadece maskele",
         "mode_smart_on": "Yön: Akıllı — log maskelenir, AI cevabı geri çevrilir",
@@ -1620,7 +1657,7 @@ def run_gui(agent):
     pa.grid_rowconfigure(1, weight=1, uniform="io"); pa.grid_rowconfigure(3, weight=1, uniform="io")
     chiprow = clear(pa); chiprow.grid(row=0, column=0, sticky="ew", pady=(0, 10))
     CHIP_GROUPS = [("grp_net", ("ipv4", "ipv6", "domain", "url", "hostname", "mac", "iface")),
-                   ("grp_id", ("user", "email", "container", "config", "secret", "date", "custom"))]
+                   ("grp_id", ("user", "email", "natid", "container", "config", "secret", "date", "custom"))]
     optvars = {}
     def make_chip(parent, t):
         v = tk.BooleanVar(value=t not in DEFAULT_OFF); optvars[t] = v

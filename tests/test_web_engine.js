@@ -169,6 +169,40 @@ function checkUrlsAndDomains(E) {
   return problems;
 }
 
+// Test IDs are generated from 9 digits, never real ones.
+function natid(nine) {
+  const d = [...nine].map(Number);
+  const d10 = (((d[0] + d[2] + d[4] + d[6] + d[8]) * 7 - (d[1] + d[3] + d[5] + d[7])) % 10 + 10) % 10;
+  return nine + d10 + ((d.reduce((a, b) => a + b, 0) + d10) % 10);
+}
+function checkNationalId(E) {
+  const a = natid("123456789"), b = natid("987654321"), bad = a.slice(0, -1) + ((+a.slice(-1) + 1) % 10);
+  const m = new E.Mapper(null), problems = [];
+  const cases = [["PS D:\\CorpUser\\" + a + "\\Desktop>", /^PS D:\\CorpUser\\NATIONAL_ID_1\\Desktop>$/],
+                 ["tckn=" + b + ", again " + a, /^tckn=NATIONAL_ID_2, again NATIONAL_ID_1$/],
+                 ["phone 05321234567 wrong " + bad + " longer 9" + a + " decimal " + a + ".5", /NATIONAL_ID/]];
+  cases.forEach(([txt, want], i) => {
+    const [out] = m.anonymize(txt);
+    const found = want.test(out);
+    if ((i < 2 && !found) || (i === 2 && found)) problems.push(JSON.stringify(txt) + " → " + JSON.stringify(out));
+    if (m.restore(out)[0] !== txt) problems.push(JSON.stringify(txt) + " did not restore");
+  });
+  return problems;
+}
+function checkCustomTerms(E) {
+  const m = new E.Mapper(null);
+  m.setCustom(["acme", "net"]);
+  const txt = "ACME report, AcmeUser, ACME_Prod, x_acme, X_ACME, acme2024, myAcme, acme.example.com, " +
+              "network dotnet netApp NET_HOST";
+  const want = "CUSTOM_1 report, CUSTOM_2User, CUSTOM_1_Prod, x_CUSTOM_3, CUSTOM_4, CUSTOM_5, CUSTOM_6, " +
+               "CUSTOM_3.example.com, network dotnet CUSTOM_7App CUSTOM_8_HOST";
+  const [out] = m.anonymize(txt);
+  const problems = out === want ? [] : ["custom terms:\n  got  " + out + "\n  want " + want];
+  if (m.restore(out)[0] !== txt) problems.push("custom terms did not restore");
+  if (m.anonymize(out)[0] !== out) problems.push("masking twice changed the text");
+  return problems;
+}
+
 function checkClassify(E) {
   const m = new E.Mapper(null), problems = [];
   m.anonymize("kemal@web01:~$ ping 10.10.10.20");
@@ -184,7 +218,8 @@ function checkClassify(E) {
 const CHECKS = [["consistency across messages", checkConsistency], ["Windows line endings (CRLF)", checkCrlf],
   ["upgrade from older ledgers", checkLegacyUpgrade], ["key formats (Stripe, GitHub, AWS…)", checkSecretFormats],
   ["password keys in several languages", checkPasswordLanguages], ["token boundaries", checkTokenBoundaries],
-  ["domain and URL tokens", checkUrlsAndDomains], ["classify + restore", checkClassify]];
+  ["domain and URL tokens", checkUrlsAndDomains], ["national ID (T.C. kimlik no)", checkNationalId],
+  ["custom terms", checkCustomTerms], ["classify + restore", checkClassify]];
 
 function main() {
   const E = loadEngine(process.argv[2]);

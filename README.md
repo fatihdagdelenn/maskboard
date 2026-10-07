@@ -44,6 +44,7 @@ or browser language, and you can switch between them at any time.
 | `DOMAIN_n` | Domain names; a full name is one token | `test.example-corp.com` → `DOMAIN_1` |
 | `URL_n` | `http://` and `https://` addresses, including the path | `https://portal.example-corp.com/login?x=1` → `URL_1` |
 | `USER_n` | User names | `alice@web01:~$` → `USER_1@HOST_1:~$` |
+| `NATIONAL_ID_n` | Turkish national ID numbers (T.C. kimlik no), validated by their check digits | `D:\Users\12345678950` → `D:\Users\NATIONAL_ID_1` |
 | `PROJECT_n`, `CONTAINER_n` | Project and container names | `shop-web-1` → `PROJECT_1-web-1`, `nostalgic_hopper` → `CONTAINER_1` |
 | `IFACE_n` | Non-standard network interfaces | `br-3f2a1b4c5d6e` → `IFACE_1` |
 | `MAIL_n` | Email addresses | `ops@example-corp.com` → `MAIL_1` |
@@ -121,9 +122,10 @@ The **Mode** switch changes this behaviour:
   reset. Secrets appear as `••••••••`.
 
 Categories are grouped as **Network** (IPv4, IPv6, DNS, URL, Host, MAC, Interface) and
-**Identity & secrets** (User, Email, Container, Config, Secret, Date, Custom). All of them
-except Date are on by default; turn off any that masks too much. Use the **custom terms**
-box for words that are not detected automatically, such as a company name.
+**Identity & secrets** (User, Email, National ID, Container, Config, Secret, Date, Custom). All of
+them except Date are on by default; turn off any that masks too much. Use the **custom terms**
+box for words that are not detected automatically, such as a company name (see
+[Custom terms](#custom-terms)).
 
 The **EN | TR** switch in the header changes the interface language immediately. The
 choice is remembered.
@@ -235,6 +237,11 @@ Some values that look like secrets are left alone:
 - Metadata keys such as `PASSWORD_MIN_LENGTH`, `TOKEN_URL` and `DB_PASSWORD_FILE`.
 - `PWD=`, which is the working directory.
 
+**National IDs.** An 11-digit number is masked as `NATIONAL_ID_n` only when both check digits
+of the Turkish ID algorithm are right and it is not part of a longer number, so phone numbers
+(`0532…`), timestamps and random numbers are left alone. Only about 1 in 100 random 11-digit
+numbers passes the check.
+
 **Dates** such as `2026-10-01`, `01.10.2026`, `30/09/2026`, `01/Oct/2026` and `Oct 1, 2026`
 are always recognised, so they are never mistaken for IPs or hosts. They are not masked by
 default because timelines matter when debugging; turn on the **Date** category to hide
@@ -257,6 +264,21 @@ them.
 - Public domains and registries: `docker.io`, `ghcr.io`, `quay.io`, `gcr.io`,
   `registry.k8s.io`, `github.com`, `redhat.com`, `docs.oracle.com`
 - Container IDs, `sha256` digests and git commits (hex identifiers)
+
+## Custom terms
+
+Type words that ClipVeil cannot know are sensitive, such as a company, a customer or a project
+code, separated by commas: `acme, project-x, Contoso Ltd`. They are remembered between
+sessions.
+
+- Matching ignores case: `acme` finds `ACME`, `Acme` and `acme`. Each spelling gets its own
+  token so the answer restores exactly as written (`ACME` → `CUSTOM_1`, `Acme` → `CUSTOM_2`).
+- Whole words match, and so do parts of identifiers: `ACME_Prod` → `CUSTOM_1_Prod`,
+  `AcmeUser` → `CUSTOM_2User`, `acme.example.com` → `CUSTOM_3.example.com`.
+- When a token in that position could not be restored (`X_ACME`, `acme2024`, `myAcme`), the
+  whole identifier becomes one token instead, so the term never stays visible.
+- A term inside an ordinary word is ignored: `net` does not touch `network` or `dotnet`.
+- Longer terms win over shorter ones when they overlap.
 
 ## Upgrading from Anonim Ajan
 
@@ -305,6 +327,7 @@ Further checks cover:
 - key formats;
 - password words in several languages;
 - token boundaries;
+- national ID check digits and custom-term matching;
 - URL and domain rules;
 - the log / AI answer classification.
 
