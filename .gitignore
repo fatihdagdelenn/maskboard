@@ -1,0 +1,23 @@
+# Ledgers and exports contain real IPs, hostnames and emails: never commit them
+.clipveil.json
+clipveil-ledger*.json
+.anonim_ajan.json
+anonim-defteri*.json
+*.log
+
+# PyInstaller output (publish binaries on GitHub Releases instead)
+build/
+dist/
+*.spec
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+
+# OS
+Thumbs.db
+desktop.ini
+.DS_Store

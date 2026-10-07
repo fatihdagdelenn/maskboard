@@ -1,0 +1,35 @@
+[
+  {
+    "Id": "3f2a1b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f70",
+    "Created": "2026-10-01T06:12:01.114Z",
+    "Name": "/ithub-web-1",
+    "Config": {
+      "Hostname": "3f2a1b4c5d6e",
+      "User": "",
+      "Env": [
+        "DB_HOST=db01.sirket.com.tr",
+        "DB_USER=appuser",
+        "DB_PASSWORD=Gizli.Parola!42",
+        "PATH=/usr/local/sbin:/usr/local/bin"
+      ],
+      "Image": "registry.sirket.com.tr/ithub/web:2.4",
+      "Labels": {
+        "com.docker.compose.project": "ithub",
+        "com.docker.compose.service": "web",
+        "com.docker.compose.project.working_dir": "/home/kemal/projects/ithub"
+      }
+    },
+    "NetworkSettings": {
+      "Networks": {
+        "ithub_default": {
+          "Gateway": "172.20.0.1",
+          "IPAddress": "172.20.0.5",
+          "IPPrefixLen": 16,
+          "IPv6Gateway": "",
+          "GlobalIPv6Address": "",
+          "MacAddress": "02:42:ac:14:00:05"
+        }
+      }
+    }
+  }
+]

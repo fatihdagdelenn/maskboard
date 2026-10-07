@@ -1,0 +1,12 @@
+USER_1@HOST_1:~/projects/PROJECT_1$ mysql -u USER_2 -p -h DOMAIN_1 crm
+root@HOST_2:/var/lib/postgresql# psql -U USER_3 -h 127.0.0.1 DB_1
+[USER_1@HOST_1 PROJECT_1]$ ssh USER_1@DOMAIN_2
+PS C:\Users\USER_1\projeler\PROJECT_1> docker compose -p PROJECT_1 up -d
+USER_1@HOST_1:~$ curl -u USER_4:PASSWORD_1 URL_1
+USER_1@HOST_1:~$ id
+uid=1001(USER_1) gid=1001(USER_1) groups=1001(USER_1),27(sudo),999(docker)
+jdbc:postgresql://DOMAIN_1:5432/DB_1?user=USER_3&password=PASSWORD_2
+git clone git@github.com:acme/PROJECT_1.git
+-----BEGIN OPENSSH PRIVATE KEY-----
+SECRET_1
+-----END OPENSSH PRIVATE KEY-----

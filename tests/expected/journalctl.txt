@@ -1,0 +1,8 @@
+Oct 01 09:12:01 HOST_1 sshd[1234]: Accepted publickey for USER_1 from IP_PUB_1 port 52314 ssh2: RSA SHA256:TOKEN_1
+Oct 01 09:12:01 HOST_1 sshd[1234]: pam_unix(sshd:session): session opened for user USER_1(uid=1001) by (uid=0)
+Oct 01 09:13:44 HOST_1 sudo[2201]:    USER_1 : TTY=pts/0 ; PWD=/home/USER_1/projects/PROJECT_1 ; USER=root ; COMMAND=/usr/bin/docker restart PROJECT_1-web-1
+Oct 01 09:14:02 HOST_1 sshd[2310]: Failed password for invalid user oracle from IP_PUB_2 port 41122 ssh2
+Oct 01 09:14:05 HOST_1 sshd[2311]: Invalid user USER_2 from IP_PUB_2 port 41130
+Oct 01 09:15:10 HOST_1 dockerd[901]: time="2026-10-01T09:15:10.123+03:00" level=error msg="Handler for POST /v1.43/containers/PROJECT_1-web-1/restart returned error"
+Oct 01 09:15:11 HOST_1 kernel: IFACE_1: port 1(veth1a2b3c4) entered blocking state
+Oct 01 09:15:12 HOST_1 systemd[1]: Started docker-PROJECT_1.service - PROJECT_1 stack.

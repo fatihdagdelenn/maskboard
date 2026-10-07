@@ -1,0 +1,29 @@
+{
+ "_comment": "Shared by test_masking.py and test_web_engine.js. leaks: real values that must never appear in the masked output. keep: context that must stay as is.",
+ "leaks": {
+  "ip_a.txt": ["kemal", "web01", "ithub", "10.10.10.20", "10.10.10.255", "10.10.10.1", "185.12.34.56", "00:50:56:a1:b2:c3", "fe80::250:56ff:fea1:b2c3", "172.17.0.1", "br-3f2a1b4c5d6e", "mgmt-net0", "192.168.50.4", "6e:2f:1a:2b:3c:4d"],
+  "docker_ps.txt": ["kemal", "web01", "ithub", "nostalgic_hopper", "registry.sirket.com.tr"],
+  "dotenv.txt": ["ithub", "db01", "sirket.com.tr", "appdb", "appuser", "Gizli.Parola!42", "R3dis-Pa55", "10.10.10.30", "raporcu", "M0ngo.Sifre", "raporlar", "9fK2mQ7xL4pZ8vB1nC6tR3yW5sD0hJ", "pQ7vX2mL9kR4tB8nW1cZ6yH3sJ5dF0gA", "AKIAIOSFODNN7EXAMPLE", "wJalrXUtnFEMI", "ghp_", "bildirim@", "Mail.Sifre9", "kemal"],
+  "etc_hosts.txt": ["web01", "db01", "veritabani", "redisprod", "yonetim", "sirket.com.tr", "10.10.10.20", "10.10.10.30", "192.168.50.4", "185.12.34.56", "partner-firma"],
+  "env.txt": ["web01", "kemal", "ithub", "185.12.34.56", "10.10.10.20", "hvs."],
+  "docker_inspect.json": ["ithub", "kemal", "sirket.com.tr", "appuser", "Gizli.Parola!42", "172.20.0.5", "172.20.0.1", "02:42:ac:14:00:05"],
+  "nginx.conf": ["ithub", "10.10.10.21", "app02", "sirket.com.tr", "185.12.34.0", "eyJhbGci"],
+  "journalctl.txt": ["web01", "kemal", "185.12.34.56", "ithub", "45.13.22.9", "deneme123", "br-3f2a1b4c5d6e", "x9KzQ2mP7vL4nR8tY6wB1cD5fG0hJ3sA2qW"],
+  "prompt_conn.txt": ["kemal", "web01", "ithub", "raporcu", "db01", "appuser", "yonetim", "sirket.com.tr", "entegrasyon", "Ent3gre.Sifre", "appdb", "Url.Parola1", "b3BlbnNzaC1rZXkt"],
+  "jboss.txt": ["db01", "sirket.com.tr", "appdb", "appuser", "Gizli.Parola!42", "raporDS", "ithub"],
+  "docker_ps_local.txt": ["kemal", "srvdocker", "ithub", "vm-inventory", "it-system-management-hub", "dockotp", "totp-panel", "totp", "10.0.0.15", "k3Jd9xPq2LmZ7vBn4RtY8wQe1AsDf6Gh", "Yonetici.2026!"]
+ },
+ "keep": {
+  "ip_a.txt": [" lo:", "ens192", "enp11s0", "docker0", "veth1a2b3c4@if23", "inet6", "link/ether", "link/loopback", "qdisc", "brd", "scope host", "00:00:00:00:00:00", "ff:ff:ff:ff:ff:ff", "127.0.0.1/8", "::1/128", "valid_lft forever", "fq_codel", "/24", "/16", "/64"],
+  "docker_ps.txt": ["CONTAINER ID", "postgres:15-alpine", "redis:7", "ghcr.io/acme/worker", "0.0.0.0:8080", ":::8080", "-web-1", "-db-1", "_cache_1", "_default", "3f2a1b4c5d6e", "DRIVER    SCOPE", "bridge    local"],
+  "dotenv.txt": ["DB_PORT=5432", "PASSWORD_MIN_LENGTH=12", "SESSION_TTL=3600", "/run/secrets/db_password", "${OLD_DB_PASS}", "LOG_LEVEL=info", "API_TOKEN_URL=URL_"],
+  "etc_hosts.txt": ["127.0.0.1       localhost", "127.0.1.1", "ip6-localhost", "ip6-loopback", "ff02::1", "ip6-allnodes", "ip6-allrouters", "::1"],
+  "env.txt": ["/bin/bash", "en_US.UTF-8", "java-17-openjdk-amd64", "HISTSIZE=1000", "/usr/local/sbin"],
+  "docker_inspect.json": ["\"Hostname\": \"3f2a1b4c5d6e\"", "IPv6Gateway", "GlobalIPv6Address", "IPPrefixLen", "com.docker.compose.service", "/usr/local/sbin"],
+  "nginx.conf": ["listen 443 ssl http2", "/24", "10.0.0.0/8", "fullchain.pem", "deny all"],
+  "journalctl.txt": ["sshd[1234]", "ssh2", "USER=root", "invalid user oracle", "veth1a2b3c4", "pts/0", "uid=0"],
+  "prompt_conn.txt": ["root@", "127.0.0.1", "sudo", "docker", "git@github.com:acme/", "PRIVATE KEY"],
+  "docker_ps_local.txt": ["ghcr.io/open-webui/open-webui:main", "open-webui\n", "postgres:16-alpine", "postgres                       16-alpine", "-app-1", "-db-1", "[::]:18443", "ADMIN_USERNAME=\"admin\"", "Administrator", "/data/"],
+  "jboss.txt": ["org.jboss.jca.core.connectionmanager.pool", "IJ000604", "WFLYSRV0010", ".war\"", "jboss-eap-7.4.12", "server.log.2026-09-30", "standalone.xml", "2026-10-01 09:12:01,114", "task-12", "Thread Pool -- 74"]
+ }
+}

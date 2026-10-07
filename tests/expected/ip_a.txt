@@ -1,0 +1,30 @@
+USER_1@HOST_1:~/projects/PROJECT_1$ ip a
+1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1000
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+    inet 127.0.0.1/8 scope host lo
+       valid_lft forever preferred_lft forever
+    inet6 ::1/128 scope host
+       valid_lft forever preferred_lft forever
+2: ens192: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc mq state UP group default qlen 1000
+    link/ether MAC_1 brd ff:ff:ff:ff:ff:ff
+    altname enp11s0
+    inet IP_PRIV_1/24 brd IP_PRIV_2 scope global noprefixroute ens192
+       valid_lft forever preferred_lft forever
+    inet IP_PUB_1/28 scope global ens192
+    inet6 IPV6_PRIV_1/64 scope link noprefixroute
+       valid_lft forever preferred_lft forever
+3: docker0: <NO-CARRIER,BROADCAST,MULTICAST,UP> mtu 1500 qdisc noqueue state DOWN group default
+    link/ether MAC_2 brd ff:ff:ff:ff:ff:ff
+    inet IP_PRIV_3/16 brd IP_PRIV_4 scope global docker0
+4: IFACE_1: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP group default
+    link/ether MAC_3 brd ff:ff:ff:ff:ff:ff
+    inet IP_PRIV_5/16 brd IP_PRIV_6 scope global IFACE_1
+5: veth1a2b3c4@if23: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue master IFACE_1 state UP group default
+    link/ether MAC_4 brd ff:ff:ff:ff:ff:ff link-netnsid 0
+    inet6 IPV6_PRIV_2/64 scope link
+6: IFACE_2: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc fq_codel state UP
+    inet IP_PRIV_7/24 scope global IFACE_2
+USER_1@HOST_1:~/projects/PROJECT_1$ ip route
+default via IP_PRIV_8 dev ens192 proto static metric 100
+IP_PRIV_9/24 dev ens192 proto kernel scope link src IP_PRIV_1 metric 100
+IP_PRIV_10/16 dev IFACE_1 proto kernel scope link src IP_PRIV_5

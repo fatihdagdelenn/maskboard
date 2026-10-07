@@ -1,0 +1,19 @@
+kemal@srvdocker:~/ithub$ docker ps
+CONTAINER ID   IMAGE                                COMMAND                  CREATED        STATUS                  PORTS                                           NAMES
+2d58c6793e0f   vm-inventory-app                     "uvicorn app.main:ap…"   5 hours ago    Up 5 hours (healthy)    0.0.0.0:18443->8000/tcp, [::]:18443->8000/tcp   vm-inventory-app-1
+74f34688c6bf   it-system-management-hub:latest      "./docker-entrypoint…"   21 hours ago   Up 21 hours             0.0.0.0:3300->3000/tcp, [::]:3300->3000/tcp     ithub
+63077c7c0879   ghcr.io/open-webui/open-webui:main   "bash start.sh"          2 months ago   Up 28 hours (healthy)   0.0.0.0:3000->8080/tcp, [::]:3000->8080/tcp     open-webui
+8763df49154a   dockotp-totp-panel                   "python app.py"          3 months ago   Up 28 hours (healthy)   10.0.0.15:8080->8080/tcp                        totp-panel
+dab95e2f1c34   postgres:16-alpine                   "docker-entrypoint.s…"   3 months ago   Up 28 hours (healthy)   5432/tcp                                        totp-db-1
+kemal@srvdocker:~/ithub$ docker images
+REPOSITORY                     TAG           IMAGE ID       CREATED        SIZE
+it-system-management-hub       latest        5f4e3d2c1b0a   21 hours ago   412MB
+dockotp-totp-panel             latest        0a1b2c3d4e5f   3 months ago   188MB
+postgres                       16-alpine     9e8d7c6b5a4f   4 months ago   245MB
+kemal@srvdocker:~/ithub$ cat .env
+DATABASE_URL="file:../data/ithub.db"
+SESSION_SECRET="k3Jd9xPq2LmZ7vBn4RtY8wQe1AsDf6Gh"
+
+ADMIN_USERNAME="admin"
+ADMIN_PASSWORD="Yonetici.2026!"
+ADMIN_NAME="Administrator"

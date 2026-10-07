@@ -1,0 +1,1513 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ClipVeil</title>
+<style>
+  :root{
+    --ink:#0d1117;
+    --panel:#151b23;
+    --panel-2:#1b232d;
+    --line:#2a3542;
+    --line-soft:#212a34;
+    --text:#c9d4e0;
+    --text-dim:#7d8b9c;
+    --text-faint:#556072;
+    --real:#f2596a;      /* real / sensitive */
+    --real-bg:rgba(242,89,106,.12);
+    --safe:#43c46a;      /* masked / safe */
+    --safe-bg:rgba(67,196,106,.12);
+    --act:#4fb3d9;       /* action / brand */
+    --act-2:#63d6ff;
+    --amber:#e3b341;
+    --radius:10px;
+    --mono:ui-monospace,"SF Mono","Cascadia Code","JetBrains Mono","Fira Code",Consolas,monospace;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0;background:
+      radial-gradient(1200px 600px at 80% -10%,rgba(79,179,217,.06),transparent 60%),
+      var(--ink);
+    color:var(--text);font-family:var(--sans);font-size:15px;line-height:1.55;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1180px;margin:0 auto;padding:28px 22px 80px}
+
+  /* ---------- header ---------- */
+  header{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;flex-wrap:wrap;
+    padding-bottom:20px;border-bottom:1px solid var(--line-soft);margin-bottom:24px}
+  .brand{display:flex;align-items:center;gap:13px}
+  .logo{width:40px;height:40px;border-radius:9px;flex:none;position:relative;
+    background:linear-gradient(150deg,#1d2833,#0f151c);border:1px solid var(--line);
+    display:grid;place-items:center}
+  .logo::before{content:"";width:15px;height:11px;border:2px solid var(--act);border-radius:2px;
+    box-shadow:0 6px 0 -4px var(--act)}
+  .logo::after{content:"";position:absolute;width:7px;height:7px;border-radius:50%;
+    border:2px solid var(--act-2);top:9px}
+  h1{font-size:19px;margin:0;letter-spacing:-.2px;font-weight:650}
+  .sub{color:var(--text-dim);font-size:13px;margin-top:2px}
+  .offline{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--safe);
+    background:var(--safe-bg);border:1px solid rgba(67,196,106,.28);padding:7px 12px;border-radius:99px;
+    font-family:var(--mono)}
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--safe);box-shadow:0 0 0 0 rgba(67,196,106,.5);
+    animation:pulse 2.6s infinite}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(67,196,106,.45)}70%{box-shadow:0 0 0 6px rgba(67,196,106,0)}100%{box-shadow:0 0 0 0 rgba(67,196,106,0)}}
+
+  /* ---------- status bar ---------- */
+  .status{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:22px;
+    font-family:var(--mono);font-size:12.5px;color:var(--text-dim)}
+  .status b{color:var(--text)}
+  .status .chip{padding:3px 9px;border-radius:6px;border:1px solid var(--line);background:var(--panel)}
+  .status .safe{color:var(--safe);border-color:rgba(67,196,106,.3)}
+  .status .warn{color:var(--real);border-color:rgba(242,89,106,.3)}
+
+  /* ---------- layout ---------- */
+  .grid{display:grid;grid-template-columns:1fr 380px;gap:20px;align-items:start}
+  @media(max-width:900px){.grid{grid-template-columns:1fr}}
+
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}
+  .phead{display:flex;align-items:center;justify-content:space-between;gap:10px;
+    padding:13px 16px;border-bottom:1px solid var(--line-soft);background:var(--panel-2)}
+  .phead .t{display:flex;align-items:center;gap:9px;font-weight:600;font-size:13.5px}
+  .num{width:20px;height:20px;border-radius:5px;background:var(--ink);border:1px solid var(--line);
+    display:grid;place-items:center;font-family:var(--mono);font-size:11px;color:var(--act-2);flex:none}
+  .pbody{padding:16px}
+  .hint{font-size:12.5px;color:var(--text-faint);margin:0 0 12px}
+
+  textarea{width:100%;min-height:190px;resize:vertical;background:var(--ink);color:var(--text);
+    border:1px solid var(--line);border-radius:8px;padding:12px 13px;font-family:var(--mono);
+    font-size:13px;line-height:1.6;outline:none}
+  textarea:focus{border-color:var(--act);box-shadow:0 0 0 3px rgba(79,179,217,.12)}
+  textarea::placeholder{color:var(--text-faint)}
+
+  /* toggles */
+  .toggles{display:flex;flex-wrap:wrap;gap:8px;margin:13px 0 4px}
+  .tog{display:inline-flex;align-items:center;gap:7px;font-family:var(--mono);font-size:12px;
+    padding:6px 10px;border:1px solid var(--line);border-radius:7px;background:var(--panel-2);
+    cursor:pointer;user-select:none;color:var(--text-dim);transition:.12s}
+  .tog:hover{border-color:var(--act);transform:translateY(-1px)}
+  .tog input{appearance:none;width:13px;height:13px;border:1.5px solid var(--text-faint);border-radius:3px;
+    margin:0;position:relative;cursor:pointer;transition:.12s}
+  .tog input:checked{background:var(--act);border-color:var(--act)}
+  .tog input:checked::after{content:"";position:absolute;left:3.5px;top:1px;width:3px;height:6px;
+    border:solid var(--ink);border-width:0 2px 2px 0;transform:rotate(45deg)}
+  .tog:has(input:checked){color:var(--text);border-color:rgba(79,179,217,.4);background:rgba(79,179,217,.08)}
+
+  .custom-in{width:100%;margin-top:11px;background:var(--ink);color:var(--text);border:1px solid var(--line);
+    border-radius:7px;padding:9px 11px;font-family:var(--mono);font-size:12.5px;outline:none}
+  .custom-in:focus{border-color:var(--act)}
+
+  .row{display:flex;gap:9px;flex-wrap:wrap;margin-top:14px}
+  button{font-family:var(--sans);font-size:13.5px;font-weight:600;border-radius:8px;padding:10px 16px;
+    cursor:pointer;border:1px solid var(--line);background:var(--panel-2);color:var(--text);
+    transition:transform .12s ease,background .15s ease,border-color .15s ease,box-shadow .15s ease,color .15s ease}
+  button:hover{border-color:var(--act);color:#fff;transform:translateY(-1px)}
+  button:active{transform:translateY(0)}
+  button:disabled{opacity:.4;cursor:not-allowed;transform:none;box-shadow:none}
+  .primary{background:linear-gradient(180deg,#57c0e8,#3f9fc4);border-color:#57c0e8;color:#08222d;
+    box-shadow:0 4px 14px rgba(79,179,217,.22)}
+  .primary:hover{color:#04161d;filter:brightness(1.05);box-shadow:0 7px 22px rgba(79,179,217,.34)}
+  .ghost{background:transparent}
+  .clear{background:transparent;color:var(--text-faint);border-color:var(--line-soft)}
+  .clear:hover{color:var(--real);border-color:var(--real)}
+
+  /* output preview */
+  .out{margin-top:16px}
+  .out-label{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+  .out-label .l{font-family:var(--mono);font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--text-faint)}
+  pre.render{margin:0;background:var(--ink);border:1px solid var(--line);border-radius:8px;padding:13px;
+    font-family:var(--mono);font-size:13px;line-height:1.6;white-space:pre-wrap;word-break:break-word;
+    max-height:340px;overflow:auto;min-height:60px;transition:border-color .2s ease}
+  pre.render:empty::before{content:attr(data-empty);color:var(--text-faint)}
+  pre.render.bump{animation:bump .45s cubic-bezier(.2,.7,.3,1)}
+  @keyframes bump{0%{opacity:.25;transform:translateY(4px);border-color:var(--act)}100%{opacity:1;transform:none}}
+  mark.m{background:var(--safe-bg);color:var(--safe);border-radius:4px;padding:0 3px;
+    border:1px solid rgba(67,196,106,.3)}
+  mark.r{background:var(--real-bg);color:var(--real);border-radius:4px;padding:0 3px;
+    border:1px solid rgba(242,89,106,.3)}
+
+  /* ledger */
+  .ledger{position:sticky;top:18px}
+  .ledger .pbody{padding:0}
+  .led-tools{display:flex;gap:7px;padding:12px 14px;border-bottom:1px solid var(--line-soft);flex-wrap:wrap}
+  .led-tools button{padding:6px 10px;font-size:12px}
+  .led-scroll{max-height:520px;overflow:auto}
+  table{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:12px}
+  thead th{position:sticky;top:0;background:var(--panel-2);text-align:left;padding:8px 12px;
+    color:var(--text-faint);font-weight:500;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;
+    border-bottom:1px solid var(--line-soft);z-index:1}
+  tbody td{padding:8px 12px;border-bottom:1px solid var(--line-soft);vertical-align:top;word-break:break-all}
+  tbody tr:hover{background:var(--panel-2)}
+  .tag{display:inline-block;font-size:9.5px;letter-spacing:.04em;padding:2px 6px;border-radius:5px;
+    border:1px solid var(--line);color:var(--text-dim);text-transform:uppercase}
+  .c-real{color:var(--real)}
+  .c-fake{color:var(--safe)}
+  .arrow{color:var(--text-faint);padding:0 2px}
+  .empty{padding:34px 20px;text-align:center;color:var(--text-faint);font-size:13px;font-family:var(--sans)}
+
+  .footnote{margin-top:26px;font-size:12px;color:var(--text-faint);line-height:1.7;
+    border-top:1px solid var(--line-soft);padding-top:16px}
+  .footnote code{font-family:var(--mono);background:var(--panel);padding:1px 5px;border-radius:4px;
+    border:1px solid var(--line-soft);color:var(--text-dim)}
+
+  .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(20px);
+    background:var(--panel-2);border:1px solid var(--act);color:var(--text);padding:10px 18px;border-radius:9px;
+    font-size:13px;opacity:0;pointer-events:none;transition:.25s;z-index:50;box-shadow:0 8px 30px rgba(0,0,0,.4)}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+
+  /* type groups */
+  .groups{margin:13px 0 4px;display:grid;gap:8px}
+  .grp{display:grid;grid-template-columns:104px 1fr;align-items:start;gap:8px}
+  .grp .gl{font-size:11.5px;color:var(--text-faint);padding-top:7px}
+  .grp .toggles{margin:0}
+  @media(max-width:600px){.grp{grid-template-columns:1fr}.grp .gl{padding-top:0}}
+  .hint code{font-family:var(--mono);font-size:11.5px;background:var(--panel-2);padding:1px 5px;border-radius:4px;
+    border:1px solid var(--line-soft);color:var(--text-dim)}
+  .tog.off-default{border-style:dashed}
+
+  /* smart direction hint */
+  .smart{display:none;align-items:center;gap:10px;flex-wrap:wrap;margin-top:10px;padding:9px 12px;
+    border:1px solid rgba(227,179,65,.35);background:rgba(227,179,65,.08);border-radius:8px;
+    font-size:12.5px;color:var(--amber)}
+  .smart.show{display:flex}
+  .smart button{padding:5px 10px;font-size:12px}
+
+  mark.s{background:rgba(227,179,65,.12);color:var(--amber);border-radius:4px;padding:0 3px;
+    border:1px solid rgba(227,179,65,.35)}
+  .c-secret{color:var(--text-faint);letter-spacing:2px}
+  .tag.secret{color:var(--amber);border-color:rgba(227,179,65,.35)}
+  .tag.old{color:var(--text-faint);border-style:dashed}
+  .led-search{width:100%;background:var(--ink);color:var(--text);border:1px solid var(--line);border-radius:6px;
+    padding:6px 9px;font-family:var(--mono);font-size:12px;outline:none;margin:0 14px 0 0}
+  .led-search:focus{border-color:var(--act)}
+  .persist{display:flex;align-items:center;gap:7px;padding:10px 14px;border-bottom:1px solid var(--line-soft);
+    font-size:12px;color:var(--text-dim);cursor:pointer;user-select:none}
+  .persist input{accent-color:var(--act)}
+  .persist small{color:var(--text-faint)}
+  kbd{font-family:var(--mono);font-size:11px;padding:1px 5px;border:1px solid var(--line);border-bottom-width:2px;
+    border-radius:4px;background:var(--panel-2);color:var(--text-dim)}
+
+  @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+  :focus-visible{outline:2px solid var(--act-2);outline-offset:2px}
+  .langsw{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+  .langsw button{border:0;border-radius:0;padding:6px 10px;font-size:12px;background:transparent;color:var(--text-dim)}
+  .langsw button[aria-pressed="true"]{background:var(--panel-2);color:var(--text)}
+  .hdr-right{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .tag{white-space:nowrap}
+  td.c-fake{word-break:normal;white-space:nowrap}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="brand">
+      <div class="logo" aria-hidden="true"></div>
+      <div>
+        <h1>ClipVeil</h1>
+        <div class="sub" data-i18n="tagline"></div>
+      </div>
+    </div>
+    <div class="hdr-right">
+      <div class="offline"><span class="dot"></span> <span data-i18n="offline"></span></div>
+      <div class="langsw" role="group" aria-label="Language">
+        <button data-lang="en">EN</button><button data-lang="tr">TR</button>
+      </div>
+    </div>
+  </header>
+
+  <div class="status">
+    <span data-i18n="status"></span>
+    <span class="chip" id="stCount"></span>
+    <span class="chip warn" id="stSafe"></span>
+    <span id="stNote" style="color:var(--text-faint)"></span>
+  </div>
+
+  <div class="grid">
+    <div>
+      <section class="panel" style="margin-bottom:20px">
+        <div class="phead">
+          <div class="t"><span class="num">1</span> <span data-i18n="out_title"></span></div>
+          <span style="font-family:var(--mono);font-size:11px;color:var(--real)" data-i18n="real_data"></span>
+        </div>
+        <div class="pbody">
+          <p class="hint" data-i18n="out_hint"></p>
+          <textarea id="src" spellcheck="false" data-i18n-ph="src_ph"></textarea>
+
+          <div class="smart" id="smart">
+            <span id="smartMsg"></span>
+            <button class="ghost" id="btnMoveToReply" data-i18n="move_to_reply"></button>
+          </div>
+
+          <div class="groups" id="groups"></div>
+          <input class="custom-in" id="customTerms" spellcheck="false" data-i18n-ph="custom_ph">
+
+          <div class="row">
+            <button class="primary" id="btnMask" data-i18n="btn_mask"></button>
+            <button class="ghost" id="btnCopyMasked" disabled data-i18n="btn_copy_masked"></button>
+            <button class="clear" id="btnClearIn" data-i18n="btn_clear"></button>
+          </div>
+
+          <div class="out">
+            <div class="out-label">
+              <span class="l" data-i18n="masked_label"></span>
+              <span id="maskedCount" style="font-family:var(--mono);font-size:11px;color:var(--safe)"></span>
+            </div>
+            <pre class="render" id="masked" aria-live="polite" data-i18n-empty="empty_out"></pre>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="phead">
+          <div class="t"><span class="num">2</span> <span data-i18n="in_title"></span></div>
+          <span style="font-family:var(--mono);font-size:11px;color:var(--safe)" data-i18n="tokenized"></span>
+        </div>
+        <div class="pbody">
+          <p class="hint" data-i18n="in_hint"></p>
+          <textarea id="reply" spellcheck="false" data-i18n-ph="reply_ph"></textarea>
+          <div class="row">
+            <button class="primary" id="btnRestore" data-i18n="btn_restore"></button>
+            <button class="ghost" id="btnCopyRestored" disabled data-i18n="btn_copy_result"></button>
+            <button class="clear" id="btnClearReply" data-i18n="btn_clear"></button>
+          </div>
+          <div class="out">
+            <div class="out-label">
+              <span class="l" data-i18n="restored_label"></span>
+              <span style="font-family:var(--mono);font-size:11px;color:var(--real)" data-i18n="real"></span>
+            </div>
+            <pre class="render" id="restored" aria-live="polite" data-i18n-empty="empty_out"></pre>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <aside class="panel ledger">
+      <div class="phead">
+        <div class="t"><span class="num">↔</span> <span data-i18n="ledger"></span></div>
+        <span id="ledCount" style="font-family:var(--mono);font-size:11px;color:var(--text-dim)">0</span>
+      </div>
+      <div class="pbody">
+        <div class="led-tools">
+          <button class="ghost" id="btnExport" data-i18n="export"></button>
+          <button class="ghost" id="btnImport" data-i18n="import"></button>
+          <button class="ghost" id="btnReset" data-i18n="reset"></button>
+          <input type="file" id="fileImport" accept="application/json,.json" hidden>
+        </div>
+        <label class="persist" data-i18n-title="persist_title">
+          <input type="checkbox" id="persist"> <span data-i18n="persist"></span> <small data-i18n="persist_note"></small>
+        </label>
+        <div class="led-tools" style="padding-top:10px;padding-bottom:10px">
+          <input class="led-search" id="ledSearch" spellcheck="false" data-i18n-ph="search_ph">
+        </div>
+        <div class="led-scroll">
+          <table>
+            <thead><tr><th data-i18n="col_type"></th><th style="color:var(--real)" data-i18n="col_real"></th><th style="color:var(--safe)" data-i18n="col_token"></th></tr></thead>
+            <tbody id="ledBody"></tbody>
+          </table>
+          <div class="empty" id="ledEmpty"></div>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <p class="footnote" data-i18n="footnote"></p>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ENGINE START — JavaScript port of the clipveil.py engine; tests/test_web_engine.js keeps them in sync. */
+const ClipVeilEngine = (function () {
+  "use strict";
+
+  // ---- helpers mirroring Python re semantics ----
+  const W = "\\p{L}\\p{N}_";                     // Python \w (Unicode)
+  const BL = "(?<![" + W + "])";                  // Python \b (word start)
+  const BR = "(?![" + W + "])";                   // Python \b (word end)
+  const G = (src, f) => new RegExp(src, (f || "") + "gdu");      // finditer
+  const R = (src, f) => new RegExp(src, (f || "") + "du");       // search
+  const FULL = (src, f) => new RegExp("^(?:" + src + ")$", (f || "") + "u");
+  const esc = s => s.replace(/[.*+?^${}()|[\]\\\/]/g, "\\$&");
+  const all = (re, t) => Array.from(t.matchAll(re));
+  const gs = (m, g) => m.indices.groups[g][0];                  // group start
+  const ge = (m, g) => m.indices.groups[g][1];
+  const words = s => new Set(s.trim().split(/\s+/));
+  const isDigits = s => /^\d+$/u.test(s);
+
+  let MASK_SYSTEM_USERS = false;
+  const SYSTEM_USERS = words(`root admin administrator sa sys system postgres mysql mariadb oracle redis
+    mongodb www-data nginx apache httpd nobody daemon bin sync games man lp mail news uucp proxy
+    backup list irc gnats systemd-network systemd-resolve systemd-timesync messagebus syslog sshd
+    ubuntu debian centos ec2-user fedora pi vagrant jboss wildfly tomcat jenkins gitlab-runner git
+    docker sudo wheel users staff adm deploy ansible guest test user operator elasticsearch kibana
+    grafana prometheus rabbitmq zookeeper kafka hdfs yarn hive spark nagios zabbix`);
+
+  // Older releases used these prefixes; they still restore and are upgraded on the next mask.
+  const LEGACY_PREFIXES = new Set(["IP", "IPV6", "KULLANICI", "PROJE", "PAROLA", "ANAHTAR", "AYAR", "OZEL", "TARIH"]);
+  const TOKEN_PREFIXES = ["IPV6_PRIV", "IPV6_PUB", "IP_PRIV", "IP_PUB", "CONTAINER", "PASSWORD", "PROJECT",
+    "DOMAIN", "SCHEMA", "SECRET", "CONFIG", "CUSTOM", "TOKEN", "IFACE", "HOST", "MAIL", "JNDI", "USER",
+    "DATE", "URL", "MAC", "DS", "DB"].concat([...LEGACY_PREFIXES].sort());
+  const TOKEN_ALT = TOKEN_PREFIXES.slice().sort((a, b) => b.length - a.length).join("|");
+  // Not part of a word (MYDB_1) or of an UPPER_CASE identifier (DB_HOST_1); IP_1 ≠ IP_10.
+  const TOKEN_SRC = "(?<![A-Za-z0-9])(?<![A-Z]_)(?:" + TOKEN_ALT + ")_\\d+(?!\\d)";
+  const TOKEN_RE = G(TOKEN_SRC);
+  const TOKEN_FULL = FULL(TOKEN_SRC);
+  const isToken = s => TOKEN_FULL.test(s || "");
+
+  const TYPE_PREFIX = { mac: "MAC", hostname: "HOST", domain: "DOMAIN", email: "MAIL", date: "DATE",
+    custom: "CUSTOM", user: "USER", container: "CONTAINER", project: "PROJECT", iface: "IFACE", url: "URL" };
+  const PRIO = { secret: 7, custom: 6, url: 5.5, email: 5, container: 4.8, project: 4.7, iface: 4.6, user: 4.5,
+    domain: 4, date: 3.5, ipv6: 3, ipv4: 2, mac: 1, hostname: 0.5, config: 0.3 };
+  const P_CONTEXT = 6.5, P_SPREAD = 0.6, P_ENTROPY = 0.45;
+
+  const PAT_SRC = {
+    ipv4: "(?<![\\d.])(?:(?:25[0-5]|2[0-4]\\d|1?\\d?\\d)\\.){3}(?:25[0-5]|2[0-4]\\d|1?\\d?\\d)(?![\\d.])",
+    ipv6: "(?<![0-9A-Fa-f:])(?:(?:[0-9A-Fa-f]{1,4}:){7}[0-9A-Fa-f]{1,4}|(?:[0-9A-Fa-f]{1,4}:){1,7}:|(?:[0-9A-Fa-f]{1,4}:){1,6}:[0-9A-Fa-f]{1,4}|(?:[0-9A-Fa-f]{1,4}:){1,5}(?::[0-9A-Fa-f]{1,4}){1,2}|(?:[0-9A-Fa-f]{1,4}:){1,4}(?::[0-9A-Fa-f]{1,4}){1,3}|(?:[0-9A-Fa-f]{1,4}:){1,3}(?::[0-9A-Fa-f]{1,4}){1,4}|(?:[0-9A-Fa-f]{1,4}:){1,2}(?::[0-9A-Fa-f]{1,4}){1,5}|[0-9A-Fa-f]{1,4}:(?::[0-9A-Fa-f]{1,4}){1,6}|:(?:(?::[0-9A-Fa-f]{1,4}){1,7}|:))(?![0-9A-Fa-f:])",
+    email: "(?<![A-Za-z0-9._%+\\-])[A-Za-z0-9._%+\\-]+@(?:[A-Za-z0-9\\-]+\\.)+[A-Za-z]{2,}(?![A-Za-z0-9\\-])",
+    domain: "(?<![A-Za-z0-9.@\\-])(?:[A-Za-z0-9](?:[A-Za-z0-9\\-]{0,61}[A-Za-z0-9])?\\.)+[A-Za-z]{2,}(?![A-Za-z0-9\\-])",
+    mac: "(?<![0-9A-Fa-f:\\-])(?:[0-9A-Fa-f]{2}[:\\-]){5}[0-9A-Fa-f]{2}(?![0-9A-Fa-f:\\-])",
+  };
+  const PAT = {}, PAT_FULL = {};
+  for (const k in PAT_SRC) { PAT[k] = G(PAT_SRC[k]); PAT_FULL[k] = FULL(PAT_SRC[k]); }
+
+  // ---- addresses (Python ipaddress equivalents) ----
+  function parseV4(s) {
+    const p = s.split(".");
+    if (p.length !== 4) return null;
+    let n = 0;
+    for (const o of p) {
+      if (!/^\d{1,3}$/.test(o) || (o.length > 1 && o[0] === "0") || +o > 255) return null;  // Python rejects leading zeros
+      n = n * 256 + (+o);
+    }
+    return n;
+  }
+  function parseV6(s) {
+    if (s.includes("::") && s.indexOf("::") !== s.lastIndexOf("::")) return null;
+    let head = s, tail = "";
+    if (s.includes("::")) [head, tail] = s.split("::");
+    const hp = head ? head.split(":") : [], tp = tail ? tail.split(":") : [];
+    if (!s.includes("::") && hp.length !== 8) return null;
+    if (s.includes("::") && hp.length + tp.length > 7) return null;
+    const parts = hp.concat(Array(8 - hp.length - tp.length).fill("0"), tp);
+    let n = 0n;
+    for (const h of parts) { if (!/^[0-9A-Fa-f]{1,4}$/.test(h)) return null; n = (n << 16n) | BigInt(parseInt(h, 16)); }
+    return n;
+  }
+  const v4net = (a, bits) => [parseV4(a), bits];
+  const PRIV_V4 = [v4net("10.0.0.0", 8), v4net("172.16.0.0", 12), v4net("192.168.0.0", 16),
+                   v4net("100.64.0.0", 10), v4net("169.254.0.0", 16)];
+  const inV4 = (n, [base, bits]) => Math.floor(n / 2 ** (32 - bits)) === Math.floor(base / 2 ** (32 - bits));
+  const v6net = (a, bits) => [parseV6(a), BigInt(bits)];
+  const inV6 = (n, [base, bits]) => (n >> (128n - bits)) === (base >> (128n - bits));
+  const PRIV_V6 = [v6net("fc00::", 7), v6net("fe80::", 10)];
+  // networks behind Python's IPv6Address.is_reserved
+  const RESERVED_V6 = [["::", 8], ["100::", 8], ["200::", 7], ["400::", 6], ["800::", 5], ["1000::", 4],
+    ["4000::", 3], ["6000::", 3], ["8000::", 3], ["a000::", 3], ["c000::", 3], ["e000::", 4],
+    ["f000::", 5], ["f800::", 6], ["fe00::", 9]].map(([a, b]) => v6net(a, b));
+  const PUBLIC_DNS = new Set(["8.8.8.8", "8.8.4.4", "1.1.1.1", "1.0.0.1", "9.9.9.9", "208.67.222.222", "208.67.220.220"]);
+
+  function ipPrefix(ip, v6) {
+    const n4 = v6 ? null : parseV4(ip), n6 = v6 ? parseV6(ip) : null;
+    if (n4 === null && n6 === null) return v6 ? "IPV6_PUB" : "IP_PUB";
+    if (n4 !== null) return "IP" + (PRIV_V4.some(net => inV4(n4, net)) ? "_PRIV" : "_PUB");
+    return "IPV6" + (PRIV_V6.some(net => inV6(n6, net)) ? "_PRIV" : "_PUB");
+  }
+  function benignIp(ip) {
+    const n4 = parseV4(ip);
+    if (n4 !== null) {
+      if (inV4(n4, v4net("127.0.0.0", 8)) || n4 === 0 || inV4(n4, v4net("224.0.0.0", 4))) return true;
+      return ip.startsWith("255.") || PUBLIC_DNS.has(ip);
+    }
+    const n6 = parseV6(ip);
+    if (n6 === null) return false;
+    if (n6 === 1n || n6 === 0n || inV6(n6, v6net("ff00::", 8))) return true;
+    return RESERVED_V6.some(net => inV6(n6, net));
+  }
+  const WELL_KNOWN_NETS = new Set(["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "100.64.0.0/10",
+    "169.254.0.0/16", "127.0.0.0/8", "0.0.0.0/0", "224.0.0.0/4", "240.0.0.0/4", "::/0", "fc00::/7",
+    "fe80::/10", "ff00::/8"]);
+  const BENIGN_MACS = new Set(["00:00:00:00:00:00", "ff:ff:ff:ff:ff:ff"]);
+  const benignMac = m => BENIGN_MACS.has(m.toLowerCase().replace(/-/g, ":"));
+
+  // ---- dates ----
+  const _D = "(?:0?[1-9]|[12]\\d|3[01])", _M = "(?:0?[1-9]|1[0-2])", _Y = "(?:19|20)\\d{2}";
+  const _MON = "january|february|march|april|june|july|august|september|october|november|december|" +
+    "sept|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|" +
+    "ağustos|agustos|şubat|subat|haziran|temmuz|aralık|aralik|nisan|mayıs|mayis|kasım|kasim|" +
+    "eylül|eylul|ocak|mart|ekim";
+  const DATE_BODY = [
+    _Y + "([\\-/.])" + _M + "\\1" + _D,
+    _D + "([./\\-])" + _M + "\\2" + _Y,
+    "(?:0[1-9]|[12]\\d|3[01])([./])(?:0[1-9]|1[0-2])\\3\\d{2}",
+    _D + "[ \\-/.]?(?:" + _MON + ")\\.?[ \\-/.,]*" + _Y,
+    "(?:" + _MON + ")\\.?[ \\-]" + _D + ",?[ \\-]" + _Y,
+  ].join("|");
+  const DATE_RE = G("(?<!\\d)(?<!\\d[.\\-/])(?:" + DATE_BODY + ")(?!\\d|[.\\-/]\\d)", "i");
+
+  // ---- secrets ----
+  const PW_CORE = "passwd|password|passwort|passphrase|pwd|kennwort|contraseña|contrasena|motdepasse|" +
+    "mot_de_passe|senha|wachtwoord|hasło|haslo|lösenord|losenord|şifre|sifre|parola";
+  const TOK_CORE = "client[_\\-]?secret|secret[_\\-]?key|private[_\\-]?key|access[_\\-]?key|api[_\\-]?key|" +
+    "apikey|access[_\\-]?token|auth[_\\-]?token|refresh[_\\-]?token|credentials?|secret|token";
+  const KV_SEP = "[\"']?[ \\t]*(?::=|=>|->|[:=>])[ \\t]*";
+  const KV_VAL = "(?:(?<q>[\"'])(?<v1>[^\"'\\r\\n]{1,256})\\k<q>|(?<v2>[^\\s\"'<>,;&)}\\]]{1,256}))";
+  const SECRET_KV_RE = G("(?<![" + W + ".\\-/])(?<key>[" + W + ".\\-]*?(?<core>" + PW_CORE + "|" + TOK_CORE +
+    ")[" + W + ".\\-]*|[" + W + ".\\-]*[_.\\-](?<suf>key|pass)|pass)" + KV_SEP + KV_VAL, "i");
+  const SECRET_KEY_META = ["file", "path", "dir", "url", "uri", "length", "len", "size", "count", "ttl",
+    "timeout", "expiry", "expires", "expiration", "min", "max", "policy", "type", "name", "id", "enabled",
+    "required", "header", "prefix", "field", "param", "algorithm", "alg", "rotation", "store", "location",
+    "hint", "age", "format", "mode", "method", "scope", "lifetime", "interval", "reset", "changed"];
+  const SECRET_KEY_NOT = ["primary_key", "foreign_key", "sort_key", "partition_key", "public_key", "hash_key",
+    "range_key", "cache_key", "row_key", "pubkey", "public-key", "publickey"];
+  const SECRET_CLI_RE = G("(?<![" + W + "\\-])--?(?<core>password|passwd|pass|pwd|token|api-key|secret)[ =](?<v>[^\\s\"']{2,256})", "i");
+  const CURL_USER_RE = G(BL + "curl" + BR + "[^\\n|;]*?\\s(?:-u|--user)\\s+[\"']?(?<u>[^:\\s'\"]+):(?<p>[^\\s'\"]+)");
+  const SECRET_BEARER_RE = G(BL + "(?:Bearer|Basic)\\s+(?<v>[A-Za-z0-9\\-._~+/]{8,}=*)");
+  const SECRET_PEM_RE = G("-----BEGIN ([A-Z ]*)PRIVATE KEY-----\\r?\\n(?<body>[\\s\\S]+?)\\r?\\n-----END \\1PRIVATE KEY-----");
+  const SECRET_PATTERNS = [
+    BL + "(?:AKIA|ASIA)[0-9A-Z]{16}" + BR,
+    BL + "gh[pousr]_[A-Za-z0-9]{36,}" + BR,
+    BL + "github_pat_[A-Za-z0-9_]{22,}" + BR,
+    BL + "glpat-[A-Za-z0-9_\\-]{20,}" + BR,
+    BL + "xox[abprs]-[A-Za-z0-9\\-]{10,}" + BR,
+    BL + "AIza[0-9A-Za-z\\-_]{35}" + BR,
+    BL + "[sr]k_(?:live|test)_[0-9A-Za-z]{16,}" + BR,
+    BL + "hvs\\.[A-Za-z0-9_\\-]{20,}" + BR,
+    BL + "eyJ[" + W + "\\-]{8,}\\.[" + W + "\\-]{8,}\\.[" + W + "\\-]{8,}" + BR,
+  ].map(s => G(s));
+  const SECRET_SKIP = words("null none nil true false undefined empty yes no required optional string hidden masked redacted bearer basic");
+
+  const CONN_RE = G(BL + "(?<scheme>[a-z][a-z0-9+.\\-]*)://(?:(?<user>[^\\s:/@'\"]*)(?::(?<pw>[^\\s/@'\"]*))?@)?" +
+    "(?<host>\\[[0-9A-Fa-f:]+\\]|[^\\s/:?#,;'\"@\\[\\]]+)(?::\\d+)?(?:/(?<db>[A-Za-z_][" + W + "\\-]*))?", "i");
+  const DB_SCHEMES = words("postgres postgresql mysql mariadb mongodb mongodb+srv sqlserver mssql oracle db2 clickhouse cockroachdb redshift snowflake cassandra");
+
+  const PW_FULL = FULL(PW_CORE + "|pass");
+  function secretPrefix(core, suf) {
+    const c = (core || suf || "").toLowerCase();
+    if (PW_FULL.test(c)) return "PASSWORD";
+    if (c.includes("private")) return "SECRET";
+    return "TOKEN";
+  }
+  function secretOk(v, prefix) {
+    if (!v || [...v].length < 2 || isToken(v)) return false;
+    const low = v.toLowerCase();
+    if (SECRET_SKIP.has(low) || [...v].every(ch => "*•#x?.".includes(ch))) return false;
+    if (/^(\$\{|%\(|\{\{|<|\$[A-Z_])/u.test(v)) return false;
+    if (prefix === "TOKEN" && isDigits(v)) return false;
+    return true;
+  }
+  function entropy(s) {
+    const ch = [...s], n = ch.length, freq = new Map();
+    for (const c of ch) freq.set(c, (freq.get(c) || 0) + 1);
+    let e = 0; for (const c of freq.values()) e -= c / n * Math.log2(c / n);
+    return e;
+  }
+  const ENTROPY_RE = G("(?<![" + W + "+/=\\-.])[A-Za-z0-9+/_\\-]{20,}={0,2}(?![" + W + "+/=\\-.])");
+  function looksRandom(s) {
+    if (s.startsWith("/") || (s.split("/").length - 1) > 2 || isToken(s)) return false;
+    if (/^[0-9a-fA-F\-]+$/u.test(s)) return false;
+    if (!(/[a-z]/.test(s) && /[A-Z]/.test(s) && /\d/.test(s))) return false;
+    if (/(?:[A-Z][a-z]{2,}){3,}/.test(s)) return false;
+    return entropy(s) >= 3.6;
+  }
+
+  // ---- users ----
+  const USER_VAL = "(?:(?<q>[\"'])(?<v1>[^\"'\\r\\n<>()]{1,64})\\k<q>|(?<v2>[^\\s\"'<>,;&(){}\\[\\]|]{1,64}))";
+  const USER_KV_RE = G("(?<![" + W + ".\\-/])(?<key>[" + W + ".\\-]*?(?:user(?:[_\\-]?name)?|login|logname|user[ _\\-]?id|uid))" + KV_SEP + USER_VAL, "i");
+  const USER_ID_RE = G("(?<![" + W + "])(?:uid|gid|groups|euid)=(?:\\d+\\([" + W + ".\\-]+\\),?)+");
+  const USER_ID_ONE = G("\\d+\\((?<u>[" + W + ".\\-]+)\\)");
+  const USER_CLI_RE = G("(?<![" + W + "\\-])--(?:user|username|login)(?:=|\\s+)[\"']?(?<v>[" + W + ".\\-@]+)");
+  const USER_U_RE = G(BL + "(?:mysql|mysqldump|mysqladmin|mariadb|psql|pg_dump|pg_dumpall|pg_restore|createdb|" +
+    "dropdb|sudo|su|crontab|mongosh|mongo|redis-cli|sqlcmd|influx|(?:docker|podman)\\s+(?:exec|run))" + BR +
+    "[^\\n|;&]*?\\s-[uU][ \\t]*[\"']?(?<v>[A-Za-z_][" + W + ".\\-@]*)");
+  const SSH_RE = G(BL + "(?:ssh|scp|sftp|rsync|ssh-copy-id|mosh)" + BR + "[^\\n|;&]*?\\s(?<u>[A-Za-z_][" + W + ".\\-]*)@" +
+    "(?<h>[A-Za-z0-9][" + W + ".\\-]*)");
+  const HOME_SRC = "(?:/home/|/Users/|[A-Za-z]:\\\\Users\\\\|\\\\\\\\Users\\\\\\\\)(?<u>[A-Za-z_][" + W + ".\\-]*)";
+  const HOME_RE = G(HOME_SRC), HOME_ONE = R(HOME_SRC);
+  const SSHD_RE = G(BL + "(?:Accepted [" + W + "]+ for|Failed [" + W + "]+ for(?: invalid user)?|Invalid user|" +
+    "session (?:opened|closed) for user|Disconnected from(?: invalid| authenticating)? user|" +
+    "pam_unix\\([^)]*\\): [^\\n]*? user)\\s+(?<u>[A-Za-z_][" + W + ".\\-]*)");
+  const SUDO_RE = G(BL + "sudo(?:\\[\\d+\\])?:\\s+(?<u>[A-Za-z_][" + W + ".\\-]*)\\s+:");
+  const USER_SKIP = new Set(["unknown", "invalid", "none", "null", "anonymous", "public", "default", "shared",
+    "all users", "everyone", "local", "remote", "true", "false"]);
+
+  // ---- shell prompts and project directories ----
+  const PROMPT_RE1 = G("(?:^|(?<=[\\s)\\]]))(?<u>[a-z_][" + W + ".\\-]{0,31})@(?<h>[A-Za-z0-9][" + W + ".\\-]{0,62}):" +
+    "(?<d>[^\\s$#]*)[$#](?=\\s|$)", "m");
+  const PROMPT_RE2 = G("\\[(?<u>[a-z_][" + W + ".\\-]{0,31})@(?<h>[A-Za-z0-9][" + W + ".\\-]{0,62})\\s+(?<d>[^\\]\\s]+)\\]\\s?[$#]");
+  const PROMPT_PS = G("^PS (?<d>[A-Za-z]:\\\\[^>\\n]*)>", "m");
+  const SYSTEM_PATHS = ["/var/lib", "/var/log", "/var/cache", "/var/spool", "/var/run", "/etc", "/usr", "/proc",
+    "/sys", "/dev", "/run", "/boot", "/lib", "/bin", "/sbin", "/tmp", "/snap", "/nix"];
+  const DIR_CTX_RE = G(BL + "(?:PWD|OLDPWD|working_dir|WorkingDir|workdir|project\\.working_dir)[\"']?\\s*[=:]\\s*" +
+    "[\"']?(?<d>/[^\\s\"';,]+)");
+  const DEPLOY_RE = G("(?:Deployed|Undeployed|Replaced deployment|Starting deployment of|Stopped deployment|" +
+    "runtime-name\\s*:)\\s*\\\\?\"(?<p>[A-Za-z][" + W + "\\-]*?)\\.(?:war|ear|jar|rar|sar)\\\\?\"");
+  const UPSTREAM_RE = G(BL + "upstream\\s+(?<n>[A-Za-z][" + W + ".\\-]*)\\s*\\{");
+  const UPSTREAM_NAME = /^([A-Za-z][A-Za-z0-9]*?)[_\-](?:backend|upstream|app|api|web|servers?|pool)$/u;
+  const SUBDOMAIN_COMMON = words(`www mail smtp imap pop pop3 ftp sftp vpn portal intranet extranet api app apps
+    auth sso login cdn static assets img images media admin panel dev test stage staging prod beta
+    demo docs wiki git gitlab jenkins grafana kibana monitor status shop store blog news web ns ns1 ns2
+    mx owa webmail remote secure cloud files support help crm erp hr db sql ldap ad dc proxy gateway
+    registry repo nexus harbor console`);
+  const STD_DIRS = words(`~ / root home etc var opt srv tmp usr local bin sbin lib lib64 log logs data app apps
+    src code projects project proje projeler work workspace repos repo git docker compose deploy backup
+    backups www html conf config configs nginx jboss wildfly standalone configuration deployments
+    Desktop Downloads Documents Masaüstü İndirilenler Belgeler build dist target node_modules venv .venv
+    scripts test tests docs mnt media run dev proc sys boot cache spool mail share include system32
+    Windows Users sites-enabled sites-available conf.d ssl certs secrets volumes`);
+
+  // ---- syslog / journal ----
+  const SYSLOG_RE = G("^(?:[A-Z][a-z]{2}\\s+\\d{1,2}\\s+\\d{2}:\\d{2}:\\d{2}|" +
+    "\\d{4}-\\d{2}-\\d{2}[T ]\\d{2}:\\d{2}:\\d{2}(?:[.,]\\d+)?(?:Z|[+-]\\d{2}:?\\d{2})?)\\s+" +
+    "(?<h>[A-Za-z0-9][" + W + ".\\-]{0,62})\\s+(?<p>[A-Za-z][" + W + "\\-./@]*)(?:\\[\\d+\\])?:\\s", "m");
+  const LOG_LEVELS = words("INFO WARN WARNING ERROR DEBUG TRACE FATAL NOTICE CRIT CRITICAL SEVERE FINE FINER FINEST ALERT EMERG ERR");
+
+  // ---- /etc/hosts ----
+  const HOSTS_RE = G("^[ \\t]*(?<ip>(?:\\d{1,3}\\.){3}\\d{1,3}|[0-9A-Fa-f:]*:[0-9A-Fa-f:]+)[ \\t]+" +
+    "(?<names>[A-Za-z0-9][" + W + ".\\-]*(?:[ \\t]+[A-Za-z0-9][" + W + ".\\-]*){0,7})[ \\t\\r]*(?:#[^\\n]*)?$", "m");
+  const HOST_KEEP = words(`localhost localhost.localdomain localdomain broadcasthost ip6-localhost
+    ip6-loopback ip6-localnet ip6-mcastprefix ip6-allnodes ip6-allrouters ip6-allhosts
+    host.docker.internal gateway.docker.internal`);
+
+  // ---- network interfaces ----
+  const IFACE_STD_RE = FULL("lo|eth\\d+|ens\\d+(?:f\\d+)?(?:np\\d+)?|enp\\d+s\\d+(?:f\\d+)?(?:np\\d+)?|eno\\d+|" +
+    "enx[0-9a-f]{12}|em\\d+|p\\d+p\\d+|wlan\\d+|wlp\\d+s\\d+|wlo\\d+|docker\\d+|veth[0-9a-f]+|" +
+    "virbr\\d+(?:-nic)?|tun\\d+|tap\\d+|wg\\d+|bond\\d+|team\\d+|cni\\d+|flannel\\.\\d+|" +
+    "cali[0-9a-f]+|tunl\\d+|vxlan\\.calico|vxlan\\d*|kube-ipvs\\d+|kube-bridge|br\\d+|if\\d+|" +
+    "ip6tnl\\d+|sit\\d+|gre\\d+|gretap\\d+|erspan\\d+|ip_vti\\d+|ip6_vti\\d+|ip6gre\\d+|" +
+    "lxcbr\\d+|lxdbr\\d+|podman\\d+|cilium_[" + W + "]+|nodelocaldns|dummy\\d+|ovs-system|br-int|" +
+    "br-ex|ens\\d+\\.\\d+|eth\\d+\\.\\d+", "i");
+  const isStdIface = n => IFACE_STD_RE.test(n || "");
+  const IFACE_LINE_RE = G("^\\d+:\\s+(?<i>[^\\s:@]+)(?:@(?<peer>[^\\s:]+))?:\\s+<", "m");
+  const IFCONFIG_RE = G("^(?<i>[A-Za-z][" + W + ".\\-]*?):?\\s+(?:flags=|Link encap)", "m");
+  const IFACE_REF_RE = G(BL + "(?:dev|master|iif|oif|iface|interface|vlan-raw-device|bridge_ports)\\s+" +
+    "(?<i>[A-Za-z][" + W + ".\\-]*)");
+  const BRIDGE_RE = G(BL + "br-[0-9a-f]{12}" + BR);
+
+  // ---- containers / compose projects ----
+  const DOCKER_PS_HDR = G("^CONTAINER ID\\s+IMAGE\\s+[^\\n]*" + BL + "NAMES[ \\t\\r]*$", "m");
+  const DOCKER_IMAGES_HDR = G("^REPOSITORY\\s+TAG\\s+IMAGE ID" + BR + "[^\\n]*$", "m");
+  const OFFICIAL_IMAGES = words(`postgres mysql mariadb redis valkey nginx httpd node python alpine ubuntu debian
+    busybox mongo mongo-express rabbitmq elasticsearch kibana logstash grafana prometheus traefik caddy
+    memcached wordpress php golang openjdk eclipse-temurin amazoncorretto ibmjava jenkins sonarqube
+    registry adminer haproxy consul vault influxdb telegraf zookeeper kafka cassandra couchdb neo4j
+    nextcloud gitea ghost drupal joomla tomcat jetty centos fedora rockylinux almalinux oraclelinux
+    amazonlinux docker hello-world swarm solr nats etcd minio keycloak ruby rust perl gcc maven
+    gradle composer bash vaultwarden portainer pgadmin4 phpmyadmin percona clickhouse`);
+  const CONTAINER_NAME_RE = G("(?:--name[ =][\"']?|container_name:[ \\t]*[\"']?|\"Name\"\\s*:\\s*\"/)" +
+    "(?<n>[A-Za-z0-9][" + W + ".\\-]*)");
+  const DOCKER_CMD_RE = G(BL + "(?:docker|podman)\\s+(?:container\\s+)?(?:logs|exec|inspect|restart|stop|start|rm|kill|attach|top|" +
+    "stats|port|cp|update|wait|pause|unpause|rename|commit|diff|export)" + BR +
+    "(?:\\s+(?:(?:--(?:tail|since|until|user|env|workdir|env-file|format|time|signal|detach-keys)|-[nuew])" +
+    "(?:=|\\s+)\\S+|-{1,2}[" + W + "\\-]+(?:=\\S+)?))*\\s+(?<n>[A-Za-z0-9][" + W + ".\\-]*)");
+  const COMPOSE_PROJECT_RE = G("(?:com\\.docker\\.compose\\.project[\"']?\\s*[:=]\\s*[\"']?|COMPOSE_PROJECT_NAME[ \\t]*=[ \\t]*[\"']?|" +
+    BL + "docker[ \\-]compose" + BR + "[^\\n]*?\\s(?:-p|--project-name)[ =][\"']?)(?<p>[A-Za-z0-9][" + W + ".\\-]*)");
+  const COMPOSE_NAME_RE = R("^(?<p>[A-Za-z0-9][" + W + ".\\-]*?)[-_](?<s>[a-z0-9][a-z0-9.]*)[-_](?<n>\\d+)$");
+  const DOCKER_WORDS = words("bash sh zsh ash python node java psql mysql redis-cli cat ls env printenv true false");
+  const COMMON_WORDS = words(`app api web www db data test prod dev stage staging main master default
+    backend frontend server client service worker proxy cache mail admin user users home public
+    private local remote config docs src lib bin log logs tmp root`);
+
+  // ---- hostname ----
+  const HOST_BLOCK = new Set(["md5","md2","md4","sha1","sha2","sha3","sha224","sha256","sha384","sha512","ripemd160",
+    "crc32","adler32","base64","base32","utf8","utf16","utf32","utf8mb4","latin1","iso88591","x8664",
+    "amd64","arm64","aarch64","armv7l","i386","i686","ppc64le","s390x","win32","win64","http2","http3",
+    "h2","h2c","tls10","tls11","tls12","tls13","tlsv1","tlsv12","tlsv13","ssl2","ssl3","sslv3","ipv4",
+    "ipv6","ip4","ip6","inet4","inet6","icmp6","icmpv6","tcp4","tcp6","udp4","udp6","raw6","ssh1","ssh2",
+    "oauth2","ec2","s3","k8s","k3s","i18n","l10n","a11y","p2p","log4j","log4j2","ext2","ext3","ext4",
+    "fat32","ntfs","rfc822","x509","pkcs1","pkcs7","pkcs8","pkcs11","pkcs12","p12","ed25519","ed448",
+    "rsa1024","rsa2048","rsa4096","nistp256","nistp384","nistp521","secp256r1","secp384r1","prime256v1",
+    "aes128","aes192","aes256","chacha20","poly1305","overlay2","cgroup2","cgroupv2","netns0","el7",
+    "el8","el9","fc38","fc39","fc40","win10","win11","dotnet6","dotnet8","node18","node20","node22"]);
+  const KW_RE = G(BL + "(?:hostname|nodename|node|computername|computer|dnsname|host|cn)" + BR +
+    "\\s*[:=]\\s*[\"']?([A-Za-z][A-Za-z0-9\\-]{1,62})[\"']?", "i");
+  const TOK_RE = G(BL + "[A-Za-z][A-Za-z0-9]*(?:-[A-Za-z0-9]+)*" + BR);
+  const HOST_NOISE = words(`thread threads pool worker workers task tasks exec executor nio ajp main job batch
+    session sess req request conn connection tx timer scheduler async default eventloop loop reactor line row
+    col page step item port pid tid build rev release version ver attempt retry try phase stage part chunk
+    index idx slot queue listener handler consumer producer partition offset epoch gen generation pts tty`);
+  const HOST_PRODUCT = words(`java jdk jre jvm openjdk jboss wildfly eap tomcat spring hibernate postgres
+    postgresql pg mysql mariadb mssql oracle ora redis kafka nginx apache httpd centos rhel el ubuntu debian
+    windows win python py npm tls tlsv ssl sslv http https utf iso cp sha md ipv rfc cve jsr jep log slf
+    logback junit maven gradle v alpine node golang go php ruby dotnet kernel linux fedora rocky alma`);
+  const TLDS = words(`com net org io co info biz tr uk de eu us gov edu mil int local lan internal
+    intranet intra corp home localdomain cloud dev app ai tech systems online site xyz me nl fr
+    it es ru ch at be se no dk fi cz gr ro hu az kz ua il ae sa qa in cn jp kr sg hk tw au nz ca
+    br mx za arpa`);
+  const TWO_LEVEL = words(`com.tr net.tr org.tr gov.tr edu.tr bel.tr k12.tr gen.tr av.tr bbs.tr
+    co.uk org.uk ac.uk gov.uk com.au net.au co.jp co.kr com.br com.cn co.za co.in`);
+  const BENIGN_DOMAINS = Array.from(words(`example.com example.org example.net localhost.localdomain github.com
+    gitlab.com stackoverflow.com google.com microsoft.com apple.com redhat.com oracle.com
+    jboss.org wildfly.org apache.org python.org pypi.org npmjs.com npmjs.org maven.org spring.io
+    openai.com anthropic.com claude.ai chatgpt.com ubuntu.com debian.org centos.org kernel.org
+    mozilla.org w3.org ietf.org wikipedia.org docker.com docker.io kubernetes.io k8s.io ghcr.io
+    quay.io gcr.io pkg.dev postgresql.org mysql.com mariadb.org cloudflare.com letsencrypt.org
+    xmlsoap.org jcp.org sun.com java.com openjdk.org hibernate.org eclipse.org jakarta.ee
+    alpinelinux.org fedoraproject.org rockylinux.org almalinux.org golang.org nodejs.org
+    githubusercontent.com elastic.co hashicorp.com grafana.com prometheus.io nginx.org nginx.com
+    googleapis.com gstatic.com`));
+
+  function splitDomain(d) {
+    const labels = d.split(".");
+    const n = labels.length >= 3 && TWO_LEVEL.has(labels.slice(-2).join(".").toLowerCase()) ? 3 : 2;
+    return [labels.slice(0, -n), labels.slice(-n).join(".")];
+  }
+  const benignDomain = d => { const low = d.toLowerCase(); return BENIGN_DOMAINS.some(b => low === b || low.endsWith("." + b)); };
+  function validDomain(d) {
+    const tld = d.slice(d.lastIndexOf(".") + 1);
+    return tld === tld.toLowerCase() && TLDS.has(tld) && !benignDomain(d);
+  }
+
+  // ---- URLs: http(s)://… becomes a single URL_n ----
+  const URL_RE = G(BL + "https?://(?:\\[[0-9A-Fa-f:.]+\\]|[^\\s<>\"'`(){}\\[\\]|\\\\^])+", "i");
+  const URL_PARTS_RE = new RegExp("^https?://(?:(?<ui>[^/?#@]*)@)?(?<host>\\[[0-9A-Fa-f:.]+\\]|[^/:?#]*)", "iu");
+  const URL_SECRET_PARAM_RE = new RegExp("[?&#;][" + W + ".\\-]*(?:pass|pwd|token|secret|key|auth|sig|session|code|credential)[" +
+                                         W + ".\\-]*=", "iu");
+  const urlHost = url => { const m = URL_PARTS_RE.exec(url); return m ? (m.groups.host || "") : ""; };
+  /** "mask" → URL_n · "skip" → leave as is · "split" → piecewise, a URL with credentials must not reach the ledger */
+  function urlKind(url, text) {
+    const m = URL_PARTS_RE.exec(url);
+    if (!m) return "skip";
+    const host = m.groups.host || "";
+    if (!host || "$%{".includes(host[0]) || isToken(host)) return "skip";
+    const bare = host.replace(/^\[+|\]+$/g, "");
+    if (bare.toLowerCase() === "localhost" || benignIp(bare) || benignDomain(bare)) return "skip";
+    if (!host.includes(".") && R(BL + "upstream\\s+" + esc(host) + BR).test(text)) return "skip";
+    if ((m.groups.ui || "").includes(":") || URL_SECRET_PARAM_RE.test(url)) return "split";
+    return "mask";
+  }
+  /** distinctive host labels inside a domain/URL ('billing.example.com' → 'billing') */
+  function hostSpreadLabels(v, typ) {
+    const h = typ === "url" ? urlHost(v) : v;
+    if (!h || h.startsWith("[") || PAT_FULL.ipv4.test(h)) return [];
+    const labels = h.includes(".") ? splitDomain(h)[0] : [h];
+    return labels.filter(labelSpreads);
+  }
+
+  // ---- config ----
+  const CFG_FREE = ["datasource name", "datasource", "data source", "data-source", "jndi name", "jndi-name",
+    "jndi", "pool name", "pool-name", "database name", "database-name", "schema name", "service name",
+    "instance name", "connection pool", "connection-pool"];
+  const CFG_STRICT = ["database", "databasename", "db name", "db-name", "dbname", "db", "schema", "schema-name",
+    "catalog", "ds name", "dsname", "pool", "servicename", "service-name", "sid", "instance",
+    "instance-name", "realm", "context root", "context-root"];
+  const cfgAlt = keys => keys.slice().sort((a, b) => b.length - a.length)
+    .map(k => k.split(/\s+/).map(esc).join("\\s+")).join("|");
+  const CFG_VAL = "[ \\t]*[\"']?([A-Za-z_][" + W + ".\\-\\/:]*)[\"']?";
+  const CFG_FREE_RE = G("(?<!/)" + BL + "(" + cfgAlt(CFG_FREE) + ")" + BR + "[ \\t]*(?:[:=>]|:=|=>|->)?" + CFG_VAL, "i");
+  const CFG_STRICT_RE = G("(?<!/)" + BL + "(" + cfgAlt(CFG_STRICT) + ")" + BR + "[ \\t]*(?:[:=>]|:=|=>|->)" + CFG_VAL, "i");
+  const CFG_ENV_RE = G("(?<![" + W + ".\\-/])(?<key>[A-Za-z0-9_.\\-]*?(?:db[_\\-]?name|database(?:[_\\-]?name)?|" +
+    "postgres_db|mysql_database|schema(?:[_\\-]?name)?|jndi[_\\-]?name|" +
+    "datasource(?:[_\\-]?name)?))[\"']?[ \\t]*[=:][ \\t]*[\"']?(?<v>[A-Za-z_][" + W + ".\\-\\/:]*)", "i");
+  const CFG_STOP = new Set(["is", "are", "was", "were", "be", "been", "the", "a", "an", "of", "for", "to", "in", "on",
+    "and", "or", "not", "no", "yes", "true", "false", "null", "none", "name", "value", "type", "this", "that",
+    "with", "ise", "olarak", "bir", "ve", "veya", "için", "ile", "adı", "adi", "ismi", "olan", "gibi",
+    ...CFG_FREE.concat(CFG_STRICT).map(k => k.toLowerCase()),
+    "jndi-name", "pool-name", "user-name", "enabled", "use-java-context", "statistics-enabled"]);
+  function cfgPrefix(key) {
+    const k = key.toLowerCase().replace(/[\s_\-.]/gu, "");
+    if (k.includes("jndi")) return "JNDI";
+    if (k.includes("datasource") || ["dsname", "pool", "poolname", "connectionpool"].includes(k)) return "DS";
+    if (k.includes("schema")) return "SCHEMA";
+    if (["database", "dbname", "postgresdb", "mysqldatabase"].some(x => k.includes(x)) ||
+        ["db", "catalog", "sid", "servicename", "instance", "instancename"].includes(k)) return "DB";
+    return "CONFIG";
+  }
+
+  const ALL_TYPES = ["ipv4", "ipv6", "domain", "url", "hostname", "mac", "iface", "email", "user", "container",
+    "config", "secret", "date", "custom"];
+  const DEFAULT_OFF = new Set(["date"]);
+  const defaultOpts = () => Object.fromEntries(ALL_TYPES.map(t => [t, !DEFAULT_OFF.has(t)]));
+  const OPT_OF = { project: "container" };
+
+  function userOk(v) {
+    if (!v || [...v].length < 2 || isDigits(v) || isToken(v)) return false;
+    const low = v.toLowerCase();
+    if (USER_SKIP.has(low) || v.includes("/") || v.includes("$") || v.includes("{")) return false;
+    return MASK_SYSTEM_USERS || !SYSTEM_USERS.has(low);
+  }
+  function hostLabelOk(v) {
+    if (!v || [...v].length < 2 || isToken(v) || isDigits(v)) return false;
+    const low = v.toLowerCase();
+    if (HOST_KEEP.has(low) || HOST_BLOCK.has(low) || LOG_LEVELS.has(v.toUpperCase()) || isStdIface(v)) return false;
+    return !/^(?:[0-9a-f]{12}|[0-9a-f]{64})$/.test(low);
+  }
+  function looksLikeHost(tok) {
+    const n = [...tok].length;
+    if (n < 3 || n > 63) return false;
+    if (!/\d/.test(tok)) return false;
+    const low = tok.toLowerCase();
+    if (HOST_BLOCK.has(low.replace(/-/g, "")) || HOST_KEEP.has(low) || isStdIface(tok)) return false;
+    if (/ipv[46]|ip6|inet6/.test(low)) return false;
+    const fm = low.match(/^[a-z]+/); const first = fm ? fm[0] : "";
+    if (HOST_NOISE.has(first) || HOST_PRODUCT.has(first)) return false;
+    if (!/[a-z]/.test(tok) && /\d{4,}/.test(tok)) return false;
+    if (/^[0-9a-f\-]{8,}$/.test(low)) return false;
+    return tok.includes("-") || first.length >= 2;
+  }
+  const bounded = v => G("(?<![A-Za-z0-9._\\-\\/])" + esc(v) + "(?![A-Za-z0-9_\\-\\/]|\\.[A-Za-z0-9])");
+  const spreadRe = v => G("(?<![A-Za-z0-9])" + esc(v) + "(?![A-Za-z0-9])");
+  function labelSpreads(lbl) {
+    const low = lbl.toLowerCase();
+    return [...lbl].length >= 4 && !SUBDOMAIN_COMMON.has(low) && !COMMON_WORDS.has(low) &&
+      !HOST_PRODUCT.has(low) && !/\d/.test(lbl);
+  }
+
+  class Mapper {
+    /** storage: {load() → object|null, save(object)}, or null to stay in memory */
+    constructor(storage) {
+      this.storage = storage || null;
+      this._reset();
+      this.customTerms = [];
+      this.load();
+    }
+    _reset() {
+      this.entries = []; this.realToFake = new Map(); this.byReal = new Map();
+      this.secretMap = new Map(); this.tok = new Map(); this.counters = new Map();
+    }
+    _token(prefix) {
+      const n = (this.counters.get(prefix) || 0) + 1;
+      this.counters.set(prefix, n);
+      return prefix + "_" + n;
+    }
+    static _shouldUpgrade(old, prefix) {
+      if (!isToken(old)) return true;
+      const op = old.slice(0, old.lastIndexOf("_"));
+      if (op === prefix) return false;
+      if (LEGACY_PREFIXES.has(op)) return true;
+      return op === "HOST" && ["IFACE", "CONTAINER", "PROJECT", "USER"].includes(prefix);
+    }
+    _register(real, typ, prefix, secret = false, prop = false) {
+      const m = secret ? this.secretMap : this.realToFake;
+      if (m.has(real) && !(!secret && Mapper._shouldUpgrade(m.get(real), prefix))) {
+        if (prop && !secret && this.byReal.has(real)) this.byReal.get(real).prop = true;
+        return m.get(real);
+      }
+      const t = this._token(prefix);
+      m.set(real, t); this.tok.set(t, real);
+      const e = { real, fake: t, type: typ };
+      if (secret) e.secret = true;
+      if (prop) e.prop = true;
+      this.entries.push(e);
+      if (!secret) this.byReal.set(real, e);
+      return t;
+    }
+    _getFake(value, typ, prefix, prop) {
+      if (typ === "domain") return this._register(value, "domain", "DOMAIN");
+      if (typ === "ipv4" || typ === "ipv6") return this._register(value, typ, ipPrefix(value, typ === "ipv6"));
+      if (typ === "secret") return this._register(value, typ, prefix || "PASSWORD", true);
+      return this._register(value, typ, prefix || TYPE_PREFIX[typ] || "CONFIG", false, prop);
+    }
+
+    _collect(text, opts) {
+      opts = Object.assign(defaultOpts(), opts || {});
+      const on = typ => !!opts[OPT_OF[typ] || typ];
+      const found = [];                 // [s, e, v, typ, prefix, prio, prop]
+      const learned = new Map();
+      const add = (s, e, v, typ, prefix = null, prio = null, prop = false) => {
+        if (!on(typ) || s >= e) return;
+        found.push([s, e, v, typ, prefix, prio === null ? PRIO[typ] : prio, prop]);
+        if (prop && !learned.has(v)) learned.set(v, [typ, prefix]);
+      };
+      const addHost = (s, v, prio, prop = true) => {
+        if (v.includes(".") && validDomain(v)) add(s, s + v.length, v, "domain", null, prio);
+        else if (v.includes(".") && benignDomain(v)) return;
+        else if (hostLabelOk(v)) add(s, s + v.length, v, "hostname", null, prio, prop);
+      };
+      const addUser = (s, v, prio = null) => { if (userOk(v)) add(s, s + v.length, v, "user", null, prio, true); };
+      const addContainer = (s, name, prio = null) => {
+        if (!name || isToken(name) || DOCKER_WORDS.has(name) || /^[0-9a-f]{12,64}$/.test(name)) return;
+        const m = COMPOSE_NAME_RE.exec(name);
+        if (m && m.groups.p.length >= 2) add(s, s + m.groups.p.length, m.groups.p, "project", null, prio, true);
+        else add(s, s + name.length, name, "container", null, prio, true);
+      };
+
+      // 1) secrets
+      if (on("secret")) {
+        const secrets = new Map();
+        const addSecret = (s, v, p) => { add(s, s + v.length, v, "secret", p); secrets.set(v, p); };
+        for (const m of all(SECRET_KV_RE, text)) {
+          const key = m.groups.key, kl = key.toLowerCase();
+          if (SECRET_KEY_META.some(x => kl.endsWith(x)) || SECRET_KEY_NOT.some(x => kl.endsWith(x))) continue;
+          const p = secretPrefix(m.groups.core, m.groups.suf || (kl === "pass" ? "pass" : null));
+          const g = m.groups.v1 !== undefined ? "v1" : "v2";
+          let v = m.groups[g];
+          if (g === "v2") v = v.replace(/[.:]+$/u, "");
+          if ((key === "PWD" || key === "OLDPWD") && v.startsWith("/")) continue;
+          if (secretOk(v, p)) addSecret(gs(m, g), v, p);
+        }
+        for (const m of all(SECRET_CLI_RE, text)) {
+          const p = secretPrefix(m.groups.core), v = m.groups.v;
+          if (secretOk(v, p)) addSecret(gs(m, "v"), v, p);
+        }
+        for (const m of all(CURL_USER_RE, text)) {
+          addUser(gs(m, "u"), m.groups.u);
+          if (secretOk(m.groups.p, "PASSWORD")) addSecret(gs(m, "p"), m.groups.p, "PASSWORD");
+        }
+        for (const m of all(SECRET_BEARER_RE, text)) addSecret(gs(m, "v"), m.groups.v, "TOKEN");
+        for (const m of all(SECRET_PEM_RE, text)) add(gs(m, "body"), ge(m, "body"), m.groups.body, "secret", "SECRET");
+        for (const rx of SECRET_PATTERNS) for (const m of all(rx, text)) addSecret(m.index, m[0], "TOKEN");
+        for (const m of all(ENTROPY_RE, text))
+          if (looksRandom(m[0])) add(m.index, m.index + m[0].length, m[0], "secret", "TOKEN", P_ENTROPY);
+        for (const [v, p] of Array.from(secrets.entries()))
+          if ([...v].length >= 6) for (const m of all(bounded(v), text)) add(m.index, m.index + v.length, v, "secret", p);
+      }
+
+      // 2) connection strings
+      const connDbs = new Map();
+      for (const m of all(CONN_RE, text)) {
+        if (m.groups.user) addUser(gs(m, "user"), m.groups.user, P_CONTEXT);
+        const pw = m.groups.pw;
+        if (pw && secretOk(pw, "PASSWORD")) add(gs(m, "pw"), ge(m, "pw"), pw, "secret", "PASSWORD", 8);
+        const h = m.groups.host;
+        if (h && !isToken(h) && !PAT_FULL.ipv4.test(h) && !h.startsWith("[")) {
+          if (h.includes(".") && validDomain(h)) add(gs(m, "host"), ge(m, "host"), h, "domain", null, P_CONTEXT);
+          else if (!h.includes(".") && looksLikeHost(h)) add(gs(m, "host"), ge(m, "host"), h, "hostname", null, P_CONTEXT);
+        }
+        const db = m.groups.db;
+        if (db && DB_SCHEMES.has(m.groups.scheme.toLowerCase()) && !isToken(db)) {
+          add(gs(m, "db"), ge(m, "db"), db, "config", "DB", P_CONTEXT);
+          connDbs.set(db, "DB");
+        }
+      }
+
+      // 3) prompts, working directories, deployments, nginx upstreams
+      let homeUser = null;
+      const promptDir = (d0, base) => {
+        const d = d0.replace(/[/\\]+$/u, "");
+        if (SYSTEM_PATHS.some(sp => d === sp || d.startsWith(sp + "/"))) return;
+        const parts = d ? d.split(/[/\\]/) : [""];
+        const name = parts[parts.length - 1], low = name.toLowerCase();
+        if (name && !STD_DIRS.has(name) && [...name].length >= 3 && !name.startsWith("~") && !isToken(name) &&
+            !COMMON_WORDS.has(low) && !HOST_PRODUCT.has(low) && userOk(name) && !(homeUser && name === homeUser))
+          add(base + d.length - name.length, base + d.length, name, "project", null, P_CONTEXT, true);
+      };
+      for (const rx of [PROMPT_RE1, PROMPT_RE2]) for (const m of all(rx, text)) {
+        if (!isToken(m.groups.u)) addUser(gs(m, "u"), m.groups.u, P_CONTEXT);
+        if (!isToken(m.groups.h)) addHost(gs(m, "h"), m.groups.h, P_CONTEXT);
+        promptDir(m.groups.d, gs(m, "d"));
+      }
+      for (const m of all(PROMPT_PS, text)) promptDir(m.groups.d, gs(m, "d"));
+      for (const m of all(DIR_CTX_RE, text)) {
+        const hm = HOME_ONE.exec(m.groups.d); homeUser = hm ? hm.groups.u : null;
+        promptDir(m.groups.d, gs(m, "d"));
+      }
+      homeUser = null;
+      for (const m of all(DEPLOY_RE, text))
+        if (!isToken(m.groups.p)) add(gs(m, "p"), ge(m, "p"), m.groups.p, "project", null, null, true);
+      for (const m of all(UPSTREAM_RE, text)) {
+        const n = m.groups.n;
+        if (!isToken(n) && !COMMON_WORDS.has(n.toLowerCase())) {
+          const cm = UPSTREAM_NAME.exec(n);
+          if (cm && labelSpreads(cm[1])) add(gs(m, "n"), gs(m, "n") + cm[1].length, cm[1], "project", null, null, true);
+        }
+      }
+
+      // 4) users
+      for (const m of all(HOME_RE, text)) addUser(gs(m, "u"), m.groups.u);
+      for (const m of all(USER_KV_RE, text)) {
+        const g = m.groups.v1 !== undefined ? "v1" : "v2";
+        addUser(gs(m, g), m.groups[g].replace(/[.:]+$/u, ""));
+      }
+      for (const m of all(USER_ID_RE, text))
+        for (const u of all(USER_ID_ONE, m[0])) addUser(m.index + gs(u, "u"), u.groups.u);
+      for (const rx of [USER_CLI_RE, USER_U_RE]) for (const m of all(rx, text)) addUser(gs(m, "v"), m.groups.v);
+      for (const rx of [SSHD_RE, SUDO_RE]) for (const m of all(rx, text)) addUser(gs(m, "u"), m.groups.u);
+      for (const m of all(SSH_RE, text)) {
+        addUser(gs(m, "u"), m.groups.u, P_CONTEXT);
+        addHost(gs(m, "h"), m.groups.h, P_CONTEXT);
+      }
+
+      // 5) host contexts: syslog/journal, /etc/hosts
+      for (const m of all(SYSLOG_RE, text))
+        if (!LOG_LEVELS.has(m.groups.h.toUpperCase())) addHost(gs(m, "h"), m.groups.h, P_CONTEXT);
+      for (const m of all(HOSTS_RE, text)) {
+        if (!(PAT_FULL.ipv4.test(m.groups.ip) || PAT_FULL.ipv6.test(m.groups.ip))) continue;
+        const off = gs(m, "names");
+        for (const n of m.groups.names.matchAll(/\S+/gu)) addHost(off + n.index, n[0], P_CONTEXT);
+      }
+
+      // 6) network interfaces
+      const addIface = (s, name) => {
+        if (name && !isStdIface(name) && !isToken(name)) add(s, s + name.length, name, "iface", null, null, true);
+      };
+      for (const m of all(IFACE_LINE_RE, text)) addIface(gs(m, "i"), m.groups.i);
+      for (const m of all(IFCONFIG_RE, text)) addIface(gs(m, "i"), m.groups.i);
+      for (const m of all(IFACE_REF_RE, text)) if (/[\d\-]/.test(m.groups.i)) addIface(gs(m, "i"), m.groups.i);
+      for (const m of all(BRIDGE_RE, text)) addIface(m.index, m[0]);
+
+      // 7) containers and compose projects
+      for (const m of all(COMPOSE_PROJECT_RE, text)) {
+        const p = m.groups.p;
+        if (!isToken(p) && p.length >= 2) add(gs(m, "p"), ge(m, "p"), p, "project", null, null, true);
+      }
+      for (const rx of [CONTAINER_NAME_RE, DOCKER_CMD_RE]) for (const m of all(rx, text)) addContainer(gs(m, "n"), m.groups.n);
+      const imageParts = img => {
+        const repo = img.startsWith("[") ? img : img.split(/[:@]/)[0];
+        const first = repo.split("/")[0];
+        const hasRegistry = repo.includes("/") && (first.includes(".") || first.includes(":") || first === "localhost");
+        if (hasRegistry) return [repo, benignDomain(first), false];
+        if (repo.includes("/")) return [repo, true, false];
+        return [repo, OFFICIAL_IMAGES.has(repo), !OFFICIAL_IMAGES.has(repo)];
+      };
+      const addLocalImage = (s, repo, cname) => {
+        const cm = COMPOSE_NAME_RE.exec(cname || "");
+        if (cm && (repo === cm.groups.p + "-" + cm.groups.s || repo === cm.groups.p + "_" + cm.groups.s))
+          add(s, s + cm.groups.p.length, cm.groups.p, "project", null, null, true);
+        else if (!isToken(repo) && [...repo].length >= 3) add(s, s + repo.length, repo, "project", null, null, true);
+      };
+      for (const h of all(DOCKER_PS_HDR, text)) {
+        let pos = h.index + h[0].length + 1;
+        for (const line of text.slice(pos).split("\n")) {
+          const row = /^([0-9a-f]{12})\s+(?<img>\S+)/du.exec(line);
+          if (!row) break;
+          const last = /(\S+)\s*$/du.exec(line);
+          const names = last ? Array.from(last[1].matchAll(/[^,\s]+/gu)) : [];
+          const img = row.groups.img; const [repo, pub, local] = imageParts(img);
+          const firstName = names.length ? names[0][0] : null;
+          if (local && !isToken(img)) addLocalImage(pos + gs(row, "img"), repo, firstName);
+          for (const nm of names) {
+            const n = nm[0];
+            if (pub && n === repo.split("/").pop()) continue;
+            addContainer(pos + last.indices[1][0] + nm.index, n);
+          }
+          pos += line.length + 1;
+        }
+      }
+      for (const h of all(DOCKER_IMAGES_HDR, text)) {
+        let pos = h.index + h[0].length + 1;
+        for (const line of text.slice(pos).split("\n")) {
+          const row = /^(?<repo>\S+)\s+\S+\s+[0-9a-f]{12}\s/u.exec(line);
+          if (!row) break;
+          const [repo, , local] = imageParts(row.groups.repo);
+          if (local && repo !== "<none>") addLocalImage(pos, repo);
+          pos += line.length + 1;
+        }
+      }
+
+      // 8) custom terms
+      for (const term of this.customTerms.filter(t => t).sort((a, b) => b.length - a.length))
+        for (const m of all(G("(?<![A-Za-z0-9_])" + esc(term) + "(?![A-Za-z0-9_])", "i"), text))
+          add(m.index, m.index + m[0].length, m[0], "custom");
+
+      // 9) dates
+      for (const m of all(DATE_RE, text)) found.push([m.index, m.index + m[0].length, m[0], "date", null, PRIO.date, false]);
+
+      // 10) generic patterns, URLs, hostnames, config values
+      for (const typ of ["email", "domain", "ipv6", "ipv4", "mac"]) {
+        if (!on(typ)) continue;
+        for (const m of all(PAT[typ], text)) {
+          const v = m[0], end = m.index + v.length;
+          if (!v) continue;
+          if (typ === "domain" && !validDomain(v)) continue;
+          if (typ === "email" && benignDomain(v.split("@")[1])) continue;
+          if ((typ === "ipv4" || typ === "ipv6") && benignIp(v)) continue;
+          if (typ === "ipv4" || typ === "ipv6") {
+            const pm = /^\/\d{1,3}/.exec(text.slice(end, end + 4));
+            if (pm && WELL_KNOWN_NETS.has(v + pm[0])) continue;
+          }
+          if (typ === "mac" && benignMac(v)) continue;
+          add(m.index, end, v, typ);
+        }
+      }
+      if (on("url")) {
+        for (const m of all(URL_RE, text)) {
+          const v = m[0].replace(/[.,;:!?]+$/u, "");
+          if (urlKind(v, text) === "mask") add(m.index, m.index + v.length, v, "url");
+        }
+      }
+      const protectedSpans = all(TOKEN_RE, text).map(m => [m.index, m.index + m[0].length]);
+      if (on("hostname")) {
+        const seen = new Set();
+        for (const m of all(KW_RE, text)) {
+          const name = m[1], s = m.index + m[0].lastIndexOf(name);
+          if (!seen.has(s + ":" + (s + name.length)) && hostLabelOk(name)) {
+            seen.add(s + ":" + (s + name.length));
+            add(s, s + name.length, name, "hostname", null, null, !/\d/.test(name));
+          }
+        }
+        const ends = new Set(protectedSpans.map(p => p[1]));
+        for (const m of all(TOK_RE, text)) {
+          const t = m[0], s = m.index, e = s + t.length;
+          if (seen.has(s + ":" + e)) continue;
+          if (/^\.\d/.test(text.slice(e, e + 2))) continue;
+          if (/^"\s*:/u.test(text.slice(e, e + 3))) continue;
+          if (/^[0-9a-fA-F]{1,4}$/.test(t) && text.slice(e, e + 1) === ":") continue;
+          if (ends.has(s - 1) && "-_".includes(text[s - 1])) continue;
+          if (looksLikeHost(t)) add(s, e, t, "hostname");
+        }
+      }
+      if (on("config")) {
+        const values = new Map(connDbs);
+        for (const rx of [CFG_FREE_RE, CFG_STRICT_RE]) for (const m of all(rx, text)) {
+          const val = (m[2] || "").replace(/[:.]+$/u, "");
+          if ([...val].length >= 2 && !CFG_STOP.has(val.toLowerCase()) && !isToken(val) && !values.has(val))
+            values.set(val, cfgPrefix(m[1]));
+        }
+        for (const m of all(CFG_ENV_RE, text)) {
+          const val = m.groups.v.replace(/[:.]+$/u, "");
+          if ([...val].length >= 2 && !CFG_STOP.has(val.toLowerCase()) && !isToken(val) && !values.has(val))
+            values.set(val, cfgPrefix(m.groups.key));
+        }
+        for (const [v, p] of values) for (const m of all(bounded(v), text)) add(m.index, m.index + v.length, v, "config", p);
+      }
+
+      // 11) spread learned names (this message + earlier ones)
+      const spread = new Map(learned);
+      for (const f of found) if (f[3] === "domain" || f[3] === "url")
+        for (const lbl of hostSpreadLabels(f[2], f[3])) if (!spread.has(lbl)) spread.set(lbl, ["hostname", null]);
+      for (const e of this.entries) {
+        if (e.secret) continue;
+        if (e.prop && !spread.has(e.real)) spread.set(e.real, [e.type, null]);
+        if (e.type === "domain" || e.type === "url")
+          for (const lbl of hostSpreadLabels(e.real, e.type)) if (!spread.has(lbl)) spread.set(lbl, ["hostname", null]);
+      }
+      for (const [v, [typ, p]] of spread) {
+        if ([...v].length < 4 || COMMON_WORDS.has(v.toLowerCase()) || SYSTEM_USERS.has(v.toLowerCase())) continue;
+        if (!on(typ) || !text.includes(v)) continue;
+        for (const m of all(spreadRe(v), text)) add(m.index, m.index + v.length, v, typ, p, P_SPREAD);
+      }
+
+      let kept = found.filter(f => !protectedSpans.some(([ps, pe]) => f[0] < pe && ps < f[1]));
+      const secretSpans = kept.filter(f => f[3] === "secret").map(f => [f[0], f[1]]);
+      kept = kept.filter(f => f[3] !== "url" || !secretSpans.some(([ss, se]) => f[0] < se && ss < f[1]));
+      kept.sort((a, b) => (a[0] - b[0]) || (b[5] - a[5]) || ((b[1] - b[0]) - (a[1] - a[0])));
+      let chosen = [], lastEnd = -1;
+      for (const f of kept) if (f[0] >= lastEnd) { chosen.push(f); lastEnd = f[1]; }
+      if (!opts.date) chosen = chosen.filter(c => c[3] !== "date");
+      return chosen.map(([s, e, v, t, p, , pr]) => [s, e, v, t, p, pr]);
+    }
+
+    anonymize(text, opts) {
+      const matches = this._collect(text, opts);
+      let out = "", i = 0;
+      for (const [s, e, v, t, p, pr] of matches) { out += text.slice(i, s) + this._getFake(v, t, p, pr); i = e; }
+      out += text.slice(i);
+      if (matches.length) this.save();
+      return [out, matches.length];
+    }
+    /** ["restore"|"anon", known tokens, new sensitive values]: restore only if known tokens dominate */
+    classify(text, opts) {
+      const known = all(TOKEN_RE, text).filter(m => this.tok.has(m[0])).length;
+      const n = this._collect(text, opts).length;
+      return [known > 0 && known >= n ? "restore" : "anon", known, n];
+    }
+    legacyCount() { return this.entries.filter(e => !isToken(e.fake)).length; }
+    static _guard(typ) {
+      if (typ === "ipv4") return ["(?<![0-9.])", "(?![0-9.])"];
+      if (typ === "ipv6" || typ === "mac") return ["(?<![0-9A-Fa-f:.\\-])", "(?![0-9A-Fa-f:.\\-])"];
+      return ["(?<![A-Za-z0-9._\\-\\/])", "(?![A-Za-z0-9._\\-\\/])"];
+    }
+    /** wrap(real) lets the UI mark restored values */
+    restore(text, wrap) {
+      let count = 0;
+      const w = wrap || (r => r);
+      text = text.replace(TOKEN_RE, t => { const r = this.tok.get(t); if (r === undefined) return t; count++; return w(r); });
+      const legacy = this.entries.filter(e => !isToken(e.fake)).sort((a, b) => b.fake.length - a.fake.length);
+      for (const p of legacy) {
+        const [lb, la] = Mapper._guard(p.type);
+        text = text.replace(G(lb + esc(p.fake) + la), () => { count++; return w(p.real); });
+      }
+      return [text, count];
+    }
+    exportEntries() { return this.entries.filter(e => !e.secret); }
+    /** ledger as stored and exported; never contains secrets */
+    exportData() {
+      return { version: 3, entries: this.exportEntries(), counters: Object.fromEntries(this.counters),
+               custom_terms: this.customTerms };
+    }
+    importEntries(items) {
+      let added = 0;
+      for (const e of items || []) {
+        const real = e.real, fake = e.fake;
+        if (!real || !fake || e.secret || this.realToFake.has(real) || this.tok.has(fake)) continue;
+        const ne = { real, fake, type: e.type || "custom" }; if (e.prop) ne.prop = true;
+        this.realToFake.set(real, fake); this.tok.set(fake, real); this.entries.push(ne); this.byReal.set(real, ne);
+        if (isToken(fake)) {
+          const p = fake.slice(0, fake.lastIndexOf("_")), n = +fake.slice(fake.lastIndexOf("_") + 1);
+          this.counters.set(p, Math.max(this.counters.get(p) || 0, n));
+        }
+        added++;
+      }
+      this.save();
+      return added;
+    }
+    setCustom(terms) { this.customTerms = terms; this.save(); }
+    save() {
+      if (!this.storage) return;
+      try {
+        this.storage.save(this.exportData());
+      } catch (e) { /* storage unavailable: stay in memory */ }
+    }
+    load() {
+      if (!this.storage) return;
+      let d = null;
+      try { d = this.storage.load(); } catch (e) { d = null; }
+      if (!d) return;
+      this.customTerms = d.custom_terms || [];
+      for (const [k, v] of Object.entries(d.counters || {})) this.counters.set(k, +v);
+      for (const e of d.entries || []) {
+        if (e.secret || !e.real || !e.fake) continue;
+        const ne = { real: e.real, fake: e.fake, type: e.type || "custom" }; if (e.prop) ne.prop = true;
+        this.entries.push(ne);
+        if (!this.realToFake.has(e.real)) { this.realToFake.set(e.real, e.fake); this.byReal.set(e.real, ne); }
+        if (isToken(e.fake)) {
+          this.tok.set(e.fake, e.real);
+          const p = e.fake.slice(0, e.fake.lastIndexOf("_")), n = +e.fake.slice(e.fake.lastIndexOf("_") + 1);
+          this.counters.set(p, Math.max(this.counters.get(p) || 0, n));
+        }
+      }
+    }
+    clear() { this._reset(); this.save(); }
+  }
+
+  return { Mapper, TOKEN_RE, ALL_TYPES, DEFAULT_OFF, defaultOpts, isToken,
+           setMaskSystemUsers: v => { MASK_SYSTEM_USERS = !!v; } };
+})();
+/* ENGINE END */
+</script>
+<script>
+"use strict";
+(function () {
+  const E = ClipVeilEngine;
+  const $ = id => document.getElementById(id);
+  const esc = s => s.replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const MASK = "••••••••";
+
+  // ---------- i18n ----------
+  const STRINGS = {
+    en: {
+      types: { ipv4: "IPv4", ipv6: "IPv6", domain: "DNS / domain", url: "URL", hostname: "Hostname", mac: "MAC",
+               iface: "Interface", user: "User", email: "Email", container: "Container / project",
+               config: "Config values", secret: "Password / token", date: "Date", custom: "Custom terms", project: "Project" },
+      short: { domain: "DNS", hostname: "Host", iface: "Iface", email: "Email", container: "Container",
+               config: "Config", secret: "Secret", custom: "Custom" },
+      tagline: "Mask IPs, hosts, users, containers and secrets — send to the AI — restore the answer.",
+      offline: "Runs entirely in your browser · nothing leaves this page",
+      status: "Status:", count: "{n} mappings", count_secret: "{n} mappings · {s} secrets",
+      ready: "ready to send", not_ready: "not ready to send",
+      note_mem: "Ledger lives in this tab only — export it to restore later",
+      note_saved: "Ledger is saved in this browser (secrets excluded)",
+      out_title: "Outgoing — text for the AI", real_data: "REAL DATA",
+      out_hint: "Paste a log, config, <code>ip a</code>, <code>docker ps</code> or <code>.env</code> output. <kbd>Ctrl</kbd>+<kbd>Enter</kbd> masks it.",
+      src_ph: "e.g.\nadmin@web01:~/projects/shop$ docker ps\nweb01  10.10.10.20   dns: app.example-corp.com\nDB_URL=postgres://appuser:S3cret.1@db01:5432/appdb\neth0: inet 185.12.34.56/24",
+      move_to_reply: "Move to Restore", custom_ph: "Custom terms (comma separated): ACME Ltd., project-x, client name",
+      btn_mask: "Mask", btn_copy_masked: "Copy masked text", btn_clear: "Clear",
+      masked_label: "Masked output — send this to the AI", safe: "SAFE", masked_n: "{n} VALUES MASKED",
+      empty_out: "The result appears here.",
+      in_title: "Incoming — restore the AI's answer", tokenized: "TOKENIZED",
+      in_hint: "Paste the AI's answer. Tokens such as <code>IP_PRIV_1</code>, <code>HOST_2</code>, <code>USER_1</code> turn back into real values. <kbd>Ctrl</kbd>+<kbd>Enter</kbd> restores.",
+      reply_ph: "Paste the AI's answer here — e.g. 'On HOST_1, connect to IP_PRIV_1 as USER_1 and restart CONTAINER_2…'",
+      btn_restore: "Restore", btn_copy_result: "Copy result", restored_label: "Restored answer", real: "REAL",
+      ledger: "Mapping ledger", export: "Export (.json)", import: "Import", reset: "Reset",
+      persist: "Remember in this browser", persist_note: "· secrets excluded", persist_title: "Passwords are never stored",
+      search_ph: "Search the ledger: HOST_3, 10.10.…", col_type: "Type", col_real: "Real", col_token: "Token",
+      empty_ledger: "No mappings yet.<br>Paste text on the left and press <b>Mask</b>.", no_match: "No entries match the search.",
+      old: "old", secret_hidden: "Password is not shown",
+      t_need_src: "Paste some text on the left first.", t_masked: "{n} values masked", t_new: " · {a} new tokens",
+      t_nothing: "Nothing sensitive found for the selected types.", t_need_reply: "Paste the AI's answer first.",
+      t_empty_ledger: "The ledger is empty — mask something first or import a ledger.",
+      t_restored: "{n} tokens restored.", t_no_known: "No known tokens in this text.",
+      t_nothing_copy: "Nothing to copy.", t_copied: "{what} copied.", w_masked: "Masked text", w_result: "Result",
+      smart: "This text has {n} known tokens and nothing new to mask — it looks like an AI answer.",
+      t_no_export: "Nothing to export.", t_exported: "Ledger downloaded{s}. It contains real values — don't share it.",
+      t_exported_s: " · {s} secrets left out", t_imported: "{n} mappings imported — you can restore now.",
+      t_import_none: "Nothing new (everything is already in the ledger).", t_import_bad: "Could not read that file — pick a ledger .json.",
+      confirm_reset: "Delete the ledger? Answers to text you already sent can no longer be restored.",
+      t_reset: "Ledger reset.", t_cleared_in: "Input cleared.", t_cleared_reply: "Answer cleared.",
+      t_no_storage: "This browser does not allow local storage.",
+      t_persist_on: "The ledger will be kept in this browser (secrets excluded).",
+      t_persist_off: "Saved copy deleted — the ledger stays in this tab only.",
+      footnote: "<b>Tokens:</b> each real value gets a typed, numbered token — <code>IP_PRIV_1</code> / <code>IP_PUB_1</code> (the prefix length is kept: <code>IP_PRIV_1/24</code>), <code>HOST_1</code>, <code>DOMAIN_1</code> (a full name is one token: <code>test.example.com</code> → <code>DOMAIN_1</code>), <code>URL_1</code> (<code>http(s)://</code> addresses including the path), <code>MAIL_1</code>, <code>USER_1</code>, <code>CONTAINER_1</code>, <code>PROJECT_1</code>, <code>IFACE_1</code>, <code>MAC_1</code>, <code>DB_1</code>, <code>PASSWORD_1</code>, <code>TOKEN_1</code>, <code>DATE_1</code>… The same value gets the same token in every message, and compose containers such as <code>shop-web-1</code> become <code>PROJECT_1-web-1</code>, so the AI can still see how things relate.<br><b>Context:</b> shell prompts, <code>ip a</code>, <code>docker ps</code>/<code>images</code>, <code>/etc/hosts</code>, syslog/journal, sshd/sudo, connection strings and <code>KEY=value</code> lines are understood. Standard values such as <code>lo</code>, <code>eth0</code>, <code>docker0</code>, <code>127.0.0.1</code>, <code>postgres:16</code> and <code>ghcr.io</code> are left alone.<br><b>Secrets:</b> password/token/secret values in several languages, Bearer/Basic headers, PEM keys and well-known token formats are masked. Secrets live <b>only in this tab</b>: never exported, never stored, shown as <code>••••••••</code>.<br><b>Dates</b> are off by default (timelines help the AI), but they are never mistaken for IPs or hosts. Detection is heuristic — review the masked output before sending. A ledger exported from the desktop app (<code>.clipveil.json</code>) can be imported here."
+    },
+    tr: {
+      types: { ipv4: "IPv4", ipv6: "IPv6", domain: "DNS / alan adı", url: "URL", hostname: "Hostname", mac: "MAC",
+               iface: "Arayüz", user: "Kullanıcı", email: "E-posta", container: "Konteyner / proje",
+               config: "Config değerleri", secret: "Parola / token", date: "Tarih", custom: "Özel terimler", project: "Proje" },
+      short: { domain: "DNS", hostname: "Host", iface: "Arayüz", email: "E-posta", container: "Konteyner",
+               config: "Config", secret: "Parola", custom: "Özel" },
+      tagline: "IP, hostname, kullanıcı, konteyner ve parolaları etiketle — AI'a gönder — cevabı geri çevir.",
+      offline: "Tamamen tarayıcıda çalışır · veri dışarı çıkmaz",
+      status: "Durum:", count: "{n} eşleşme", count_secret: "{n} eşleşme · {s} parola",
+      ready: "gönderime hazır", not_ready: "gönderime hazır değil",
+      note_mem: "Defter yalnızca bu sekmede — geri çevirmek için dışa aktar",
+      note_saved: "Defter bu tarayıcıda saklanıyor (parolalar hariç)",
+      out_title: "Giden — AI'a gidecek metin", real_data: "GERÇEK VERİ",
+      out_hint: "Log, config, <code>ip a</code>, <code>docker ps</code>, <code>.env</code> çıktısı — hassas metni buraya yapıştır. <kbd>Ctrl</kbd>+<kbd>Enter</kbd> ile anonimleştir.",
+      src_ph: "Örn:\nadmin@web01:~/projeler/stok$ docker ps\nweb01  10.10.10.20   dns: app.example-corp.com\nDB_URL=postgres://appuser:Gizli.123@db01:5432/appdb\neth0: inet 185.12.34.56/24",
+      move_to_reply: "Geri çevir alanına taşı", custom_ph: "Özel terimler (virgülle): ACME A.Ş., proje-x, müşteri adı",
+      btn_mask: "Anonimleştir", btn_copy_masked: "Maskeli metni kopyala", btn_clear: "Temizle",
+      masked_label: "Maskeli çıktı — bunu AI'a gönder", safe: "GÜVENLİ", masked_n: "{n} DEĞER MASKELENDİ",
+      empty_out: "Sonuç burada görünecek.",
+      in_title: "Gelen — AI'ın cevabını geri çevir", tokenized: "ETİKETLİ VERİ",
+      in_hint: "AI'ın cevabını buraya yapıştır. <code>IP_PRIV_1</code>, <code>HOST_2</code>, <code>USER_1</code> gibi etiketler gerçek değerlerine döner. <kbd>Ctrl</kbd>+<kbd>Enter</kbd> ile geri çevir.",
+      reply_ph: "AI'ın cevabını buraya yapıştır — örn. 'HOST_1 üzerinde IP_PRIV_1 adresine USER_1 ile bağlanıp CONTAINER_2 konteynerini yeniden başlat...'",
+      btn_restore: "Geri çevir", btn_copy_result: "Sonucu kopyala", restored_label: "Geri çevrilmiş cevap", real: "GERÇEK",
+      ledger: "Eşleştirme defteri", export: "Dışa aktar (.json)", import: "İçe aktar", reset: "Sıfırla",
+      persist: "Bu tarayıcıda hatırla", persist_note: "· parolalar hariç", persist_title: "Parolalar hiçbir zaman kaydedilmez",
+      search_ph: "Defterde ara: HOST_3, 10.10.…", col_type: "Tür", col_real: "Gerçek", col_token: "Etiket",
+      empty_ledger: "Henüz eşleşme yok.<br>Sol tarafa metin yapıştırıp <b>Anonimleştir</b>'e bas.", no_match: "Aramayla eşleşen kayıt yok.",
+      old: "eski", secret_hidden: "Parola gösterilmez",
+      t_need_src: "Önce sol üste metin yapıştır.", t_masked: "{n} değer maskelendi", t_new: " · {a} yeni etiket",
+      t_nothing: "Seçili türlerde hassas değer bulunamadı.", t_need_reply: "Önce AI'ın cevabını yapıştır.",
+      t_empty_ledger: "Defter boş — önce anonimleştir ya da defteri içe aktar.",
+      t_restored: "{n} etiket geri çevrildi.", t_no_known: "Bu metinde bilinen etiket bulunamadı.",
+      t_nothing_copy: "Kopyalanacak içerik yok.", t_copied: "{what} kopyalandı.", w_masked: "Maskeli metin", w_result: "Sonuç",
+      smart: "Bu metinde {n} bilinen etiket var ve yeni hassas değer yok — AI cevabı olabilir.",
+      t_no_export: "Dışa aktarılacak eşleşme yok.", t_exported: "Defter indirildi{s}. Gerçek veri içerir — paylaşma.",
+      t_exported_s: " · {s} parola dahil edilmedi", t_imported: "{n} eşleşme içe aktarıldı — artık geri çevirebilirsin.",
+      t_import_none: "Yeni eşleşme yok (hepsi zaten defterde).", t_import_bad: "Dosya okunamadı — geçerli bir defter .json'u seç.",
+      confirm_reset: "Defter silinsin mi? Daha önce maskelenen cevaplar artık geri çevrilemez.",
+      t_reset: "Defter sıfırlandı.", t_cleared_in: "Giriş temizlendi.", t_cleared_reply: "Cevap alanı temizlendi.",
+      t_no_storage: "Bu tarayıcı yerel kayda izin vermiyor.",
+      t_persist_on: "Defter bu tarayıcıda saklanacak (parolalar hariç).",
+      t_persist_off: "Kayıt silindi — defter yalnızca bu sekmede.",
+      footnote: "<b>Etiketler:</b> her gerçek değer türüne göre numaralı bir etikete eşlenir — <code>IP_PRIV_1</code> / <code>IP_PUB_1</code> (ağ öneki korunur: <code>IP_PRIV_1/24</code>), <code>HOST_1</code>, <code>DOMAIN_1</code> (tam alan adı tek etiket: <code>test.example.com</code> → <code>DOMAIN_1</code>), <code>URL_1</code> (<code>http(s)://</code> adresleri yoluyla birlikte), <code>MAIL_1</code>, <code>USER_1</code>, <code>CONTAINER_1</code>, <code>PROJECT_1</code>, <code>IFACE_1</code>, <code>MAC_1</code>, <code>DB_1</code>, <code>PASSWORD_1</code>, <code>TOKEN_1</code>, <code>DATE_1</code>… Aynı değer her mesajda aynı etiketi alır; <code>shop-web-1</code> gibi compose konteynerleri <code>PROJECT_1-web-1</code> olur, böylece AI ilişkileri görebilir.<br><b>Bağlam:</b> shell prompt'u, <code>ip a</code>, <code>docker ps</code>/<code>images</code>, <code>/etc/hosts</code>, syslog/journal, sshd/sudo, bağlantı dizgileri ve <code>KEY=değer</code> satırları tanınır. <code>lo</code>, <code>eth0</code>, <code>docker0</code>, <code>127.0.0.1</code>, <code>postgres:16</code>, <code>ghcr.io</code> gibi standart değerler olduğu gibi kalır.<br><b>Gizli değerler:</b> birçok dilde parola/token/secret değerleri, Bearer/Basic başlıkları, PEM anahtarları ve bilinen token biçimleri maskelenir. Parolalar <b>yalnızca bu sekmede</b> tutulur: dışa aktarılmaz, kaydedilmez, defterde <code>••••••••</code> görünür.<br><b>Tarih</b> varsayılan olarak kapalıdır (zaman sırası AI'a yardımcı olur); tarihler yine de IP/host sanılmaz. Tespit sezgiseldir — göndermeden önce maskeli çıktıyı gözden geçir. Masaüstü uygulamanın defteri (<code>.clipveil.json</code>) buraya içe aktarılabilir."
+    }
+  };
+
+  // ---------- storage (every access may throw: private mode, blocked storage) ----------
+  const KEY = "clipveil-ledger", PREF = "clipveil-remember", LANG_KEY = "clipveil-lang";
+  const lsGet = k => { try { return localStorage.getItem(k); } catch (_) { return null; } };
+  const lsSet = (k, v) => { try { localStorage.setItem(k, v); return true; } catch (_) { return false; } };
+  const lsDel = k => { try { localStorage.removeItem(k); } catch (_) {} };
+  if (lsGet("anonim-defteri-hatirla") === "1" && lsGet(PREF) === null) {      // pre-ClipVeil keys
+    const old = lsGet("anonim-defteri-v3");
+    if (old) lsSet(KEY, old);
+    lsSet(PREF, "1");
+  }
+  lsDel("anonim-defteri-v3"); lsDel("anonim-defteri-hatirla");
+  const storage = {
+    load: () => { const s = lsGet(KEY); return s ? JSON.parse(s) : null; },
+    save: obj => { lsSet(KEY, JSON.stringify(obj)); },
+  };
+
+  let lang = lsGet(LANG_KEY) ||
+    ((navigator.languages || [navigator.language || "en"]).some(l => /^tr\b/i.test(l)) ? "tr" : "en");
+  const t = (key, vars) => {
+    let s = (STRINGS[lang] && STRINGS[lang][key]) ?? STRINGS.en[key] ?? key;
+    for (const k in (vars || {})) s = s.split("{" + k + "}").join(vars[k]);
+    return s;
+  };
+  const typeLabel = typ => STRINGS[lang].types[typ] || typ;
+  const shortLabel = typ => STRINGS[lang].short[typ] || typeLabel(typ);
+
+  const persistOn = lsGet(PREF) === "1";
+  const m = new E.Mapper(persistOn ? storage : null);
+  $("persist").checked = persistOn;
+  if (m.customTerms && m.customTerms.length) $("customTerms").value = m.customTerms.join(", ");
+
+  // ---------- type chips ----------
+  const GROUPS = [["grp_net", ["ipv4", "ipv6", "domain", "url", "hostname", "mac", "iface"]],
+                  ["grp_id", ["user", "email", "container", "config", "secret", "date", "custom"]]];
+  STRINGS.en.grp_net = "Network"; STRINGS.en.grp_id = "Identity & secrets";
+  STRINGS.tr.grp_net = "Ağ"; STRINGS.tr.grp_id = "Kimlik ve gizli";
+  $("groups").innerHTML = GROUPS.map(([g, ts]) =>
+    `<div class="grp"><span class="gl" data-i18n="${g}"></span><div class="toggles">` +
+    ts.map(x => `<label class="tog${E.DEFAULT_OFF.has(x) ? " off-default" : ""}">` +
+                `<input type="checkbox" data-t="${x}"${E.DEFAULT_OFF.has(x) ? "" : " checked"}> <span data-type="${x}"></span></label>`).join("") +
+    `</div></div>`).join("");
+  const readOpts = () => { const o = {}; document.querySelectorAll("#groups input").forEach(c => o[c.dataset.t] = c.checked); return o; };
+  const customList = () => $("customTerms").value.split(",").map(s => s.trim()).filter(Boolean);
+
+  function applyLang() {
+    document.documentElement.lang = lang;
+    document.querySelectorAll("[data-i18n]").forEach(el => { el.innerHTML = t(el.dataset.i18n); });
+    document.querySelectorAll("[data-i18n-ph]").forEach(el => { el.placeholder = t(el.dataset.i18nPh); });
+    document.querySelectorAll("[data-i18n-title]").forEach(el => { el.title = t(el.dataset.i18nTitle); });
+    document.querySelectorAll("[data-i18n-empty]").forEach(el => { el.dataset.empty = t(el.dataset.i18nEmpty); });
+    document.querySelectorAll("[data-type]").forEach(el => { el.textContent = typeLabel(el.dataset.type); });
+    document.querySelectorAll(".langsw button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.lang === lang)));
+    setMaskedCount(lastCount); renderLedger(); updateStatus(); checkSmart();
+  }
+  document.querySelectorAll(".langsw button").forEach(b => b.onclick = () => {
+    lang = b.dataset.lang; lsSet(LANG_KEY, lang); applyLang();
+  });
+
+  function highlightTokens(text) {
+    const idx = new Map(m.entries.map(e => [e.fake, e]));
+    let html = "", i = 0;
+    for (const tk of text.matchAll(E.TOKEN_RE)) {
+      const e = idx.get(tk[0]);
+      if (!e) continue;
+      html += esc(text.slice(i, tk.index));
+      const real = e.secret ? MASK : e.real;
+      html += `<mark class="${e.secret ? "s" : "m"}" title="${esc(real)} · ${esc(typeLabel(e.type))}">${esc(tk[0])}</mark>`;
+      i = tk.index + tk[0].length;
+    }
+    return html + esc(text.slice(i));
+  }
+
+  // ---------- mask ----------
+  let lastCount = null;
+  const setMaskedCount = n => { lastCount = n; $("maskedCount").textContent = n ? t("masked_n", { n }) : t("safe"); };
+  function anonymize() {
+    const text = $("src").value;
+    if (!text.trim()) { toast(t("t_need_src")); return; }
+    m.setCustom(customList());
+    const before = m.entries.length;
+    const [out, n] = m.anonymize(text, readOpts());
+    const el = $("masked");
+    el.innerHTML = highlightTokens(out); el.dataset.plain = out;
+    bump(el);
+    $("btnCopyMasked").disabled = !out.length;
+    setMaskedCount(n); hideSmart(); renderLedger(); updateStatus();
+    const added = m.entries.length - before;
+    toast(n ? t("t_masked", { n }) + (added ? t("t_new", { a: added }) : "") : t("t_nothing"));
+  }
+
+  // ---------- restore ----------
+  function restore() {
+    const text = $("reply").value;
+    if (!text.trim()) { toast(t("t_need_reply")); return; }
+    if (!m.entries.length) toast(t("t_empty_ledger"));
+    const [plain, n] = m.restore(text);
+    const [marked] = m.restore(text, r => "\u0000" + r + "\u0001");
+    const el = $("restored");
+    el.innerHTML = esc(marked).replace(/\u0000([\s\S]*?)\u0001/g, '<mark class="r">$1</mark>');
+    el.dataset.plain = plain;
+    bump(el);
+    $("btnCopyRestored").disabled = !plain.length;
+    if (m.entries.length) toast(n ? t("t_restored", { n }) : t("t_no_known"));
+  }
+
+  // ---------- smart direction: warn when the left box holds an AI answer ----------
+  let smartTimer;
+  function checkSmart() {
+    const text = $("src").value;
+    if (!text.trim() || !m.entries.length) { hideSmart(); return; }
+    const [kind, known] = m.classify(text, readOpts());
+    if (kind !== "restore") { hideSmart(); return; }
+    $("smartMsg").textContent = t("smart", { n: known });
+    $("smart").classList.add("show");
+  }
+  const hideSmart = () => $("smart").classList.remove("show");
+  $("src").addEventListener("input", () => { clearTimeout(smartTimer); smartTimer = setTimeout(checkSmart, 250); });
+  $("btnMoveToReply").onclick = () => {
+    $("reply").value = $("src").value; $("src").value = ""; hideSmart(); restore();
+    $("reply").scrollIntoView({ behavior: "smooth", block: "center" });
+  };
+
+  // ---------- ledger ----------
+  function renderLedger() {
+    const q = $("ledSearch").value.trim().toLowerCase();
+    const body = $("ledBody"), empty = $("ledEmpty");
+    $("ledCount").textContent = m.entries.length;
+    const rows = m.entries.filter(e => !q || e.fake.toLowerCase().includes(q) || (!e.secret && e.real.toLowerCase().includes(q)));
+    if (!rows.length) {
+      body.innerHTML = ""; empty.style.display = "block";
+      empty.innerHTML = m.entries.length ? t("no_match") : t("empty_ledger");
+      return;
+    }
+    empty.style.display = "none";
+    body.innerHTML = rows.slice().reverse().map(e => {
+      const old = !E.isToken(e.fake) || /^(IP|IPV6|KULLANICI|PROJE|PAROLA|ANAHTAR|AYAR|OZEL|TARIH)_\d+$/.test(e.fake);
+      const cls = e.secret ? "tag secret" : old ? "tag old" : "tag";
+      const tag = shortLabel(e.type) + (old ? " · " + t("old") : "");
+      return `<tr><td><span class="${cls}">${esc(tag)}</span></td>` +
+             (e.secret ? `<td class="c-secret" title="${esc(t("secret_hidden"))}">${MASK}</td>` : `<td class="c-real">${esc(e.real)}</td>`) +
+             `<td class="c-fake">${esc(e.fake)}</td></tr>`;
+    }).join("");
+  }
+  function updateStatus() {
+    const n = m.entries.length, s = m.entries.filter(e => e.secret).length;
+    $("stCount").textContent = s ? t("count_secret", { n, s }) : t("count", { n });
+    const has = !!$("masked").dataset.plain;
+    $("stSafe").textContent = t(has ? "ready" : "not_ready");
+    $("stSafe").className = "chip " + (has ? "safe" : "warn");
+    $("stNote").textContent = t($("persist").checked ? "note_saved" : "note_mem");
+  }
+  $("ledSearch").addEventListener("input", renderLedger);
+
+  // ---------- copy ----------
+  function copyFrom(id, whatKey) {
+    const text = $(id).dataset.plain || "";
+    if (!text) { toast(t("t_nothing_copy")); return; }
+    const done = () => toast(t("t_copied", { what: t(whatKey) }));
+    const fallback = () => {
+      const ta = document.createElement("textarea"); ta.value = text; document.body.appendChild(ta);
+      ta.select(); document.execCommand("copy"); ta.remove(); done();
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, fallback);
+    else fallback();
+  }
+
+  // ---------- export / import / reset / remember ----------
+  function exportMap() {
+    const data = m.exportData();
+    if (!data.entries.length) { toast(t("t_no_export")); return; }
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
+    a.download = "clipveil-ledger-" + new Date().toISOString().slice(0, 10) + ".json"; a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    const s = m.entries.length - data.entries.length;
+    toast(t("t_exported", { s: s ? t("t_exported_s", { s }) : "" }));
+  }
+  function importMap(file) {
+    const r = new FileReader();
+    r.onload = () => {
+      try {
+        const d = JSON.parse(r.result);
+        if (!Array.isArray(d.entries)) throw 0;
+        const added = m.importEntries(d.entries);
+        if (Array.isArray(d.custom_terms) && d.custom_terms.length && !$("customTerms").value.trim())
+          $("customTerms").value = d.custom_terms.join(", ");
+        renderLedger(); updateStatus(); checkSmart();
+        toast(added ? t("t_imported", { n: added }) : t("t_import_none"));
+      } catch (_) { toast(t("t_import_bad")); }
+    };
+    r.readAsText(file);
+  }
+  function resetAll() {
+    if (m.entries.length && !confirm(t("confirm_reset"))) return;
+    m.clear();
+    for (const id of ["masked", "restored"]) { $(id).innerHTML = ""; $(id).dataset.plain = ""; }
+    $("btnCopyMasked").disabled = $("btnCopyRestored").disabled = true;
+    setMaskedCount(null); hideSmart(); renderLedger(); updateStatus(); toast(t("t_reset"));
+  }
+  $("persist").onchange = e => {
+    if (e.target.checked) {
+      if (!lsSet(PREF, "1")) { e.target.checked = false; toast(t("t_no_storage")); return; }
+      m.storage = storage; m.save(); toast(t("t_persist_on"));
+    } else {
+      lsDel(PREF); lsDel(KEY); m.storage = null; toast(t("t_persist_off"));
+    }
+    updateStatus();
+  };
+
+  let tTimer;
+  function toast(msg) {
+    const el = $("toast"); el.textContent = msg; el.classList.add("show");
+    clearTimeout(tTimer); tTimer = setTimeout(() => el.classList.remove("show"), 2600);
+  }
+
+  const bump = el => { el.classList.remove("bump"); void el.offsetWidth; el.classList.add("bump"); };
+  $("btnMask").onclick = anonymize;
+  $("btnRestore").onclick = restore;
+  $("btnCopyMasked").onclick = () => copyFrom("masked", "w_masked");
+  $("btnCopyRestored").onclick = () => copyFrom("restored", "w_result");
+  $("btnClearIn").onclick = () => {
+    $("src").value = ""; $("masked").innerHTML = ""; $("masked").dataset.plain = "";
+    $("btnCopyMasked").disabled = true; setMaskedCount(null); hideSmart(); updateStatus(); toast(t("t_cleared_in"));
+  };
+  $("btnClearReply").onclick = () => {
+    $("reply").value = ""; $("restored").innerHTML = ""; $("restored").dataset.plain = "";
+    $("btnCopyRestored").disabled = true; toast(t("t_cleared_reply"));
+  };
+  $("btnExport").onclick = exportMap;
+  $("btnReset").onclick = resetAll;
+  $("btnImport").onclick = () => $("fileImport").click();
+  $("fileImport").onchange = e => { if (e.target.files[0]) importMap(e.target.files[0]); e.target.value = ""; };
+  const ctrlEnter = fn => e => { if ((e.ctrlKey || e.metaKey) && e.key === "Enter") { e.preventDefault(); fn(); } };
+  $("src").addEventListener("keydown", ctrlEnter(anonymize));
+  $("reply").addEventListener("keydown", ctrlEnter(restore));
+
+  applyLang();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+kemal@web01:~/projects/ithub$ mysql -u raporcu -p -h db01.sirket.com.tr crm
+root@db01:/var/lib/postgresql# psql -U appuser -h 127.0.0.1 appdb
+[kemal@web01 ithub]$ ssh kemal@yonetim.sirket.com.tr
+PS C:\Users\kemal\projeler\ithub> docker compose -p ithub up -d
+kemal@web01:~$ curl -u entegrasyon:Ent3gre.Sifre https://api.sirket.com.tr/v1/health
+kemal@web01:~$ id
+uid=1001(kemal) gid=1001(kemal) groups=1001(kemal),27(sudo),999(docker)
+jdbc:postgresql://db01.sirket.com.tr:5432/appdb?user=appuser&password=Url.Parola1
+git clone git@github.com:acme/ithub.git
+-----BEGIN OPENSSH PRIVATE KEY-----
+b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW
+-----END OPENSSH PRIVATE KEY-----

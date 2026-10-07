@@ -1,0 +1,8 @@
+Oct 01 09:12:01 web01 sshd[1234]: Accepted publickey for kemal from 185.12.34.56 port 52314 ssh2: RSA SHA256:x9KzQ2mP7vL4nR8tY6wB1cD5fG0hJ3sA2qW
+Oct 01 09:12:01 web01 sshd[1234]: pam_unix(sshd:session): session opened for user kemal(uid=1001) by (uid=0)
+Oct 01 09:13:44 web01 sudo[2201]:    kemal : TTY=pts/0 ; PWD=/home/kemal/projects/ithub ; USER=root ; COMMAND=/usr/bin/docker restart ithub-web-1
+Oct 01 09:14:02 web01 sshd[2310]: Failed password for invalid user oracle from 45.13.22.9 port 41122 ssh2
+Oct 01 09:14:05 web01 sshd[2311]: Invalid user deneme123 from 45.13.22.9 port 41130
+Oct 01 09:15:10 web01 dockerd[901]: time="2026-10-01T09:15:10.123+03:00" level=error msg="Handler for POST /v1.43/containers/ithub-web-1/restart returned error"
+Oct 01 09:15:11 web01 kernel: br-3f2a1b4c5d6e: port 1(veth1a2b3c4) entered blocking state
+Oct 01 09:15:12 web01 systemd[1]: Started docker-ithub.service - ithub stack.

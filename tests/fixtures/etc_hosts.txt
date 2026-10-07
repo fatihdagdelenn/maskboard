@@ -1,0 +1,13 @@
+127.0.0.1       localhost
+127.0.1.1       web01.sirket.com.tr web01
+10.10.10.20     db01.sirket.com.tr db01 veritabani
+10.10.10.30     cache.sirket.com.tr redisprod
+192.168.50.4    yonetim
+185.12.34.56    api.partner-firma.com
+
+# The following lines are desirable for IPv6 capable hosts
+::1     ip6-localhost ip6-loopback
+fe00::0 ip6-localnet
+ff00::0 ip6-mcastprefix
+ff02::1 ip6-allnodes
+ff02::2 ip6-allrouters

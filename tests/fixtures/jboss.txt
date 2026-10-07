@@ -1,0 +1,7 @@
+2026-10-01 09:12:01,114 ERROR [org.jboss.jca.core.connectionmanager.pool] (default task-12) IJ000604: Throwable while attempting to get a new connection
+2026-10-01 09:12:01,115 INFO  [org.jboss.as.server] (ServerService Thread Pool -- 74) WFLYSRV0010: Deployed "ithub.war" (runtime-name : "ithub.war")
+<datasource jndi-name="java:/AppDS" pool-name="raporDS" enabled="true">
+    <connection-url>jdbc:postgresql://db01.sirket.com.tr:5432/appdb</connection-url>
+    <security><user-name>appuser</user-name><password>Gizli.Parola!42</password></security>
+</datasource>
+jboss-eap-7.4.12 java version "17.0.8" server.log.2026-09-30 standalone.xml

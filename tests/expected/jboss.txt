@@ -1,0 +1,7 @@
+2026-10-01 09:12:01,114 ERROR [org.jboss.jca.core.connectionmanager.pool] (default task-12) IJ000604: Throwable while attempting to get a new connection
+2026-10-01 09:12:01,115 INFO  [org.jboss.as.server] (ServerService Thread Pool -- 74) WFLYSRV0010: Deployed "PROJECT_1.war" (runtime-name : "PROJECT_1.war")
+<datasource jndi-name="JNDI_1" pool-name="DS_1" enabled="true">
+    <connection-url>jdbc:postgresql://DOMAIN_1:5432/DB_1</connection-url>
+    <security><user-name>USER_1</user-name><password>PASSWORD_1</password></security>
+</datasource>
+jboss-eap-7.4.12 java version "17.0.8" server.log.2026-09-30 standalone.xml

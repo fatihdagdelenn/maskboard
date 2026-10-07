@@ -1,0 +1,35 @@
+[
+  {
+    "Id": "3f2a1b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f70",
+    "Created": "2026-10-01T06:12:01.114Z",
+    "Name": "/PROJECT_1-web-1",
+    "Config": {
+      "Hostname": "3f2a1b4c5d6e",
+      "User": "",
+      "Env": [
+        "DB_HOST=DOMAIN_1",
+        "DB_USER=USER_1",
+        "DB_PASSWORD=PASSWORD_1",
+        "PATH=/usr/local/sbin:/usr/local/bin"
+      ],
+      "Image": "DOMAIN_2/PROJECT_1/web:2.4",
+      "Labels": {
+        "com.docker.compose.project": "PROJECT_1",
+        "com.docker.compose.service": "web",
+        "com.docker.compose.project.working_dir": "/home/USER_2/projects/PROJECT_1"
+      }
+    },
+    "NetworkSettings": {
+      "Networks": {
+        "PROJECT_1_default": {
+          "Gateway": "IP_PRIV_1",
+          "IPAddress": "IP_PRIV_2",
+          "IPPrefixLen": 16,
+          "IPv6Gateway": "",
+          "GlobalIPv6Address": "",
+          "MacAddress": "MAC_1"
+        }
+      }
+    }
+  }
+]
