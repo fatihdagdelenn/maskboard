@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-ClipVeil — mask IPs, hostnames, users, containers and secrets in logs/configs before
+MaskBoard — mask IPs, hostnames, users, containers and secrets in logs/configs before
 pasting them into an AI assistant, then restore the AI's answer to the real values.
 Everything runs locally.
 
-  python clipveil.py                          run the desktop app
-  python clipveil.py --export-icon app.ico    write the icon (.ico or .png)
+  python maskboard.py                         run the desktop app
+  python maskboard.py --export-icon app.ico   write the icon (.ico or .png)
 
 Hotkeys (needs pynput): Ctrl+Alt+A mask clipboard · Ctrl+Alt+R restore clipboard ·
 Ctrl+Alt+T toggle auto-watch.
@@ -43,10 +43,10 @@ def _import_pystray():
     return None
 pystray = _import_pystray()
 
-APP_NAME = "ClipVeil"
+APP_NAME = "MaskBoard"
 HOME = os.path.expanduser("~")
-STORE = os.path.join(HOME, ".clipveil.json")
-LEGACY_STORE = os.path.join(HOME, ".anonim_ajan.json")
+STORE = os.path.join(HOME, ".maskboard.json")
+LEGACY_STORES = [os.path.join(HOME, n) for n in (".clipveil.json", ".anonim_ajan.json")]   # earlier names
 
 # =====================================================================
 #  ENGINE
@@ -1046,7 +1046,7 @@ STRINGS = {
         "clip_restored": "Clipboard restored: {n} values", "clip_no_tokens": "No known tokens on the clipboard.",
         "error": "Error: {e}", "notify_masked": "🛡 Masked: {n} items", "notify_restored": "↩ Restored: {n} values",
         "missing_ui": "The UI package is missing.\n\npip install customtkinter",
-        "crash_title": "ClipVeil could not start", "crash_details": "Details: {p}",
+        "crash_title": "MaskBoard could not start", "crash_details": "Details: {p}",
     },
     "tr": {
         "types": {"ipv4": "IPv4", "ipv6": "IPv6", "domain": "DNS", "url": "URL", "email": "E-posta", "mac": "MAC",
@@ -1120,7 +1120,7 @@ STRINGS = {
         "clip_restored": "Panoda geri çevrildi: {n} değer", "clip_no_tokens": "Panoda defterdeki etiketlerden biri yok.",
         "error": "Hata: {e}", "notify_masked": "🛡 Maskelendi: {n} öğe", "notify_restored": "↩ Geri çevrildi: {n} değer",
         "missing_ui": "Arayüz paketi eksik.\n\npip install customtkinter",
-        "crash_title": "ClipVeil açılamadı", "crash_details": "Ayrıntılar: {p}",
+        "crash_title": "MaskBoard açılamadı", "crash_details": "Ayrıntılar: {p}",
     },
 }
 LANGS = ("en", "tr")
@@ -1415,7 +1415,7 @@ def run_gui(agent):
     if sys.platform == "win32":
         try:   # our icon instead of Python's in the taskbar when run as a script
             import ctypes
-            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("ClipVeil.App")
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("MaskBoard.App")
         except Exception:
             pass
 
@@ -1451,7 +1451,7 @@ def run_gui(agent):
         try:
             if sys.platform == "win32":
                 import tempfile
-                ico_path = export_icon(os.path.join(tempfile.gettempdir(), "clipveil.ico"))
+                ico_path = export_icon(os.path.join(tempfile.gettempdir(), "maskboard.ico"))
                 root.iconbitmap(ico_path)
             else:
                 from PIL import ImageTk
@@ -1760,7 +1760,7 @@ def run_gui(agent):
 
     def do_export():
         p = filedialog.asksaveasfilename(parent=root, defaultextension=".json",
-                                         initialfile="clipveil-ledger-%s.json" % time.strftime("%Y-%m-%d"))
+                                         initialfile="maskboard-ledger-%s.json" % time.strftime("%Y-%m-%d"))
         if p:
             with open(p, "w", encoding="utf-8") as f:
                 json.dump(agent.mapper.export_data(), f, ensure_ascii=False, indent=1)
@@ -1876,7 +1876,7 @@ def run_gui(agent):
             pystray.MenuItem(lambda i: T("tray_quit"), tray_quit),
         )
         try:
-            icon = pystray.Icon("clipveil", app_icon(64), APP_NAME, menu)
+            icon = pystray.Icon("maskboard", app_icon(64), APP_NAME, menu)
             threading.Thread(target=icon.run, daemon=True).start()
         except Exception as ex:
             icon = None; print("Tray icon unavailable:", ex)
@@ -1937,16 +1937,18 @@ def run_gui(agent):
 
 
 def _migrate_store():
-    """Move the ledger of the pre-ClipVeil release to its new place."""
-    if not os.path.exists(STORE) and os.path.exists(LEGACY_STORE):
-        try: os.replace(LEGACY_STORE, STORE)
-        except OSError: pass
+    """Move a ledger written under an earlier name (ClipVeil, Anonim Ajan) to its new place."""
+    for old in LEGACY_STORES:
+        if os.path.exists(STORE): return
+        if os.path.exists(old):
+            try: os.replace(old, STORE)
+            except OSError: pass
 
 
 def main():
     args = sys.argv[1:]
     if args[:1] == ["--export-icon"]:
-        print("Icon written:", export_icon(args[1] if len(args) > 1 else "clipveil.ico")); return
+        print("Icon written:", export_icon(args[1] if len(args) > 1 else "maskboard.ico")); return
     if pyperclip is None:
         print("Warning: pyperclip is missing — clipboard and hotkeys are off; the boxes still work.\n"
               "  pip install pyperclip pynput")
@@ -1961,7 +1963,7 @@ def main():
         # A windowed build has no console: log the error, show it, and exit for real.
         import traceback
         detail = traceback.format_exc()
-        log = os.path.join(HOME, "clipveil-error.log")
+        log = os.path.join(HOME, "maskboard-error.log")
         try:
             with open(log, "w", encoding="utf-8") as f: f.write(detail)
         except Exception:

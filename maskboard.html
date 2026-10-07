@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ClipVeil</title>
+<title>MaskBoard</title>
 <style>
   :root{
     --ink:#0d1117;
@@ -208,7 +208,7 @@
     <div class="brand">
       <div class="logo" aria-hidden="true"></div>
       <div>
-        <h1>ClipVeil</h1>
+        <h1>MaskBoard</h1>
         <div class="sub" data-i18n="tagline"></div>
       </div>
     </div>
@@ -321,8 +321,8 @@
 <div class="toast" id="toast"></div>
 
 <script>
-/* ENGINE START — JavaScript port of the clipveil.py engine; tests/test_web_engine.js keeps them in sync. */
-const ClipVeilEngine = (function () {
+/* ENGINE START — JavaScript port of the maskboard.py engine; tests/test_web_engine.js keeps them in sync. */
+const MaskBoardEngine = (function () {
   "use strict";
 
   // ---- helpers mirroring Python re semantics ----
@@ -1208,7 +1208,7 @@ const ClipVeilEngine = (function () {
 <script>
 "use strict";
 (function () {
-  const E = ClipVeilEngine;
+  const E = MaskBoardEngine;
   const $ = id => document.getElementById(id);
   const esc = s => s.replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const MASK = "••••••••";
@@ -1258,7 +1258,7 @@ const ClipVeilEngine = (function () {
       t_no_storage: "This browser does not allow local storage.",
       t_persist_on: "The ledger will be kept in this browser (secrets excluded).",
       t_persist_off: "Saved copy deleted — the ledger stays in this tab only.",
-      footnote: "<b>Tokens:</b> each real value gets a typed, numbered token — <code>IP_PRIV_1</code> / <code>IP_PUB_1</code> (the prefix length is kept: <code>IP_PRIV_1/24</code>), <code>HOST_1</code>, <code>DOMAIN_1</code> (a full name is one token: <code>test.example.com</code> → <code>DOMAIN_1</code>), <code>URL_1</code> (<code>http(s)://</code> addresses including the path), <code>MAIL_1</code>, <code>USER_1</code>, <code>NATIONAL_ID_1</code>, <code>CONTAINER_1</code>, <code>PROJECT_1</code>, <code>IFACE_1</code>, <code>MAC_1</code>, <code>DB_1</code>, <code>PASSWORD_1</code>, <code>TOKEN_1</code>, <code>DATE_1</code>… The same value gets the same token in every message, and compose containers such as <code>shop-web-1</code> become <code>PROJECT_1-web-1</code>, so the AI can still see how things relate.<br><b>Context:</b> shell prompts, <code>ip a</code>, <code>docker ps</code>/<code>images</code>, <code>/etc/hosts</code>, syslog/journal, sshd/sudo, connection strings and <code>KEY=value</code> lines are understood. Standard values such as <code>lo</code>, <code>eth0</code>, <code>docker0</code>, <code>127.0.0.1</code>, <code>postgres:16</code> and <code>ghcr.io</code> are left alone.<br><b>Secrets:</b> password/token/secret values in several languages, Bearer/Basic headers, PEM keys and well-known token formats are masked. Secrets live <b>only in this tab</b>: never exported, never stored, shown as <code>••••••••</code>.<br><b>Dates</b> are off by default (timelines help the AI), but they are never mistaken for IPs or hosts. Detection is heuristic — review the masked output before sending. A ledger exported from the desktop app (<code>.clipveil.json</code>) can be imported here."
+      footnote: "<b>Tokens:</b> each real value gets a typed, numbered token — <code>IP_PRIV_1</code> / <code>IP_PUB_1</code> (the prefix length is kept: <code>IP_PRIV_1/24</code>), <code>HOST_1</code>, <code>DOMAIN_1</code> (a full name is one token: <code>test.example.com</code> → <code>DOMAIN_1</code>), <code>URL_1</code> (<code>http(s)://</code> addresses including the path), <code>MAIL_1</code>, <code>USER_1</code>, <code>NATIONAL_ID_1</code>, <code>CONTAINER_1</code>, <code>PROJECT_1</code>, <code>IFACE_1</code>, <code>MAC_1</code>, <code>DB_1</code>, <code>PASSWORD_1</code>, <code>TOKEN_1</code>, <code>DATE_1</code>… The same value gets the same token in every message, and compose containers such as <code>shop-web-1</code> become <code>PROJECT_1-web-1</code>, so the AI can still see how things relate.<br><b>Context:</b> shell prompts, <code>ip a</code>, <code>docker ps</code>/<code>images</code>, <code>/etc/hosts</code>, syslog/journal, sshd/sudo, connection strings and <code>KEY=value</code> lines are understood. Standard values such as <code>lo</code>, <code>eth0</code>, <code>docker0</code>, <code>127.0.0.1</code>, <code>postgres:16</code> and <code>ghcr.io</code> are left alone.<br><b>Secrets:</b> password/token/secret values in several languages, Bearer/Basic headers, PEM keys and well-known token formats are masked. Secrets live <b>only in this tab</b>: never exported, never stored, shown as <code>••••••••</code>.<br><b>Dates</b> are off by default (timelines help the AI), but they are never mistaken for IPs or hosts. Detection is heuristic — review the masked output before sending. A ledger exported from the desktop app (<code>.maskboard.json</code>) can be imported here."
     },
     tr: {
       types: { ipv4: "IPv4", ipv6: "IPv6", domain: "DNS / alan adı", url: "URL", hostname: "Hostname", mac: "MAC",
@@ -1303,21 +1303,26 @@ const ClipVeilEngine = (function () {
       t_no_storage: "Bu tarayıcı yerel kayda izin vermiyor.",
       t_persist_on: "Defter bu tarayıcıda saklanacak (parolalar hariç).",
       t_persist_off: "Kayıt silindi — defter yalnızca bu sekmede.",
-      footnote: "<b>Etiketler:</b> her gerçek değer türüne göre numaralı bir etikete eşlenir — <code>IP_PRIV_1</code> / <code>IP_PUB_1</code> (ağ öneki korunur: <code>IP_PRIV_1/24</code>), <code>HOST_1</code>, <code>DOMAIN_1</code> (tam alan adı tek etiket: <code>test.example.com</code> → <code>DOMAIN_1</code>), <code>URL_1</code> (<code>http(s)://</code> adresleri yoluyla birlikte), <code>MAIL_1</code>, <code>USER_1</code>, <code>NATIONAL_ID_1</code> (T.C. kimlik no), <code>CONTAINER_1</code>, <code>PROJECT_1</code>, <code>IFACE_1</code>, <code>MAC_1</code>, <code>DB_1</code>, <code>PASSWORD_1</code>, <code>TOKEN_1</code>, <code>DATE_1</code>… Aynı değer her mesajda aynı etiketi alır; <code>shop-web-1</code> gibi compose konteynerleri <code>PROJECT_1-web-1</code> olur, böylece AI ilişkileri görebilir.<br><b>Bağlam:</b> shell prompt'u, <code>ip a</code>, <code>docker ps</code>/<code>images</code>, <code>/etc/hosts</code>, syslog/journal, sshd/sudo, bağlantı dizgileri ve <code>KEY=değer</code> satırları tanınır. <code>lo</code>, <code>eth0</code>, <code>docker0</code>, <code>127.0.0.1</code>, <code>postgres:16</code>, <code>ghcr.io</code> gibi standart değerler olduğu gibi kalır.<br><b>Gizli değerler:</b> birçok dilde parola/token/secret değerleri, Bearer/Basic başlıkları, PEM anahtarları ve bilinen token biçimleri maskelenir. Parolalar <b>yalnızca bu sekmede</b> tutulur: dışa aktarılmaz, kaydedilmez, defterde <code>••••••••</code> görünür.<br><b>Tarih</b> varsayılan olarak kapalıdır (zaman sırası AI'a yardımcı olur); tarihler yine de IP/host sanılmaz. Tespit sezgiseldir — göndermeden önce maskeli çıktıyı gözden geçir. Masaüstü uygulamanın defteri (<code>.clipveil.json</code>) buraya içe aktarılabilir."
+      footnote: "<b>Etiketler:</b> her gerçek değer türüne göre numaralı bir etikete eşlenir — <code>IP_PRIV_1</code> / <code>IP_PUB_1</code> (ağ öneki korunur: <code>IP_PRIV_1/24</code>), <code>HOST_1</code>, <code>DOMAIN_1</code> (tam alan adı tek etiket: <code>test.example.com</code> → <code>DOMAIN_1</code>), <code>URL_1</code> (<code>http(s)://</code> adresleri yoluyla birlikte), <code>MAIL_1</code>, <code>USER_1</code>, <code>NATIONAL_ID_1</code> (T.C. kimlik no), <code>CONTAINER_1</code>, <code>PROJECT_1</code>, <code>IFACE_1</code>, <code>MAC_1</code>, <code>DB_1</code>, <code>PASSWORD_1</code>, <code>TOKEN_1</code>, <code>DATE_1</code>… Aynı değer her mesajda aynı etiketi alır; <code>shop-web-1</code> gibi compose konteynerleri <code>PROJECT_1-web-1</code> olur, böylece AI ilişkileri görebilir.<br><b>Bağlam:</b> shell prompt'u, <code>ip a</code>, <code>docker ps</code>/<code>images</code>, <code>/etc/hosts</code>, syslog/journal, sshd/sudo, bağlantı dizgileri ve <code>KEY=değer</code> satırları tanınır. <code>lo</code>, <code>eth0</code>, <code>docker0</code>, <code>127.0.0.1</code>, <code>postgres:16</code>, <code>ghcr.io</code> gibi standart değerler olduğu gibi kalır.<br><b>Gizli değerler:</b> birçok dilde parola/token/secret değerleri, Bearer/Basic başlıkları, PEM anahtarları ve bilinen token biçimleri maskelenir. Parolalar <b>yalnızca bu sekmede</b> tutulur: dışa aktarılmaz, kaydedilmez, defterde <code>••••••••</code> görünür.<br><b>Tarih</b> varsayılan olarak kapalıdır (zaman sırası AI'a yardımcı olur); tarihler yine de IP/host sanılmaz. Tespit sezgiseldir — göndermeden önce maskeli çıktıyı gözden geçir. Masaüstü uygulamanın defteri (<code>.maskboard.json</code>) buraya içe aktarılabilir."
     }
   };
 
   // ---------- storage (every access may throw: private mode, blocked storage) ----------
-  const KEY = "clipveil-ledger", PREF = "clipveil-remember", LANG_KEY = "clipveil-lang";
+  const KEY = "maskboard-ledger", PREF = "maskboard-remember", LANG_KEY = "maskboard-lang";
   const lsGet = k => { try { return localStorage.getItem(k); } catch (_) { return null; } };
   const lsSet = (k, v) => { try { localStorage.setItem(k, v); return true; } catch (_) { return false; } };
   const lsDel = k => { try { localStorage.removeItem(k); } catch (_) {} };
-  if (lsGet("anonim-defteri-hatirla") === "1" && lsGet(PREF) === null) {      // pre-ClipVeil keys
-    const old = lsGet("anonim-defteri-v3");
-    if (old) lsSet(KEY, old);
-    lsSet(PREF, "1");
+  // keys written under earlier names (ClipVeil, Anonim Ajan)
+  for (const [oldKey, oldPref] of [["clipveil-ledger", "clipveil-remember"], ["anonim-defteri-v3", "anonim-defteri-hatirla"]]) {
+    if (lsGet(oldPref) === "1" && lsGet(PREF) === null) {
+      const old = lsGet(oldKey);
+      if (old) lsSet(KEY, old);
+      lsSet(PREF, "1");
+    }
+    lsDel(oldKey); lsDel(oldPref);
   }
-  lsDel("anonim-defteri-v3"); lsDel("anonim-defteri-hatirla");
+  if (lsGet("clipveil-lang") && lsGet(LANG_KEY) === null) lsSet(LANG_KEY, lsGet("clipveil-lang"));
+  lsDel("clipveil-lang");
   const storage = {
     load: () => { const s = lsGet(KEY); return s ? JSON.parse(s) : null; },
     save: obj => { lsSet(KEY, JSON.stringify(obj)); },
@@ -1479,7 +1484,7 @@ const ClipVeilEngine = (function () {
     if (!data.entries.length) { toast(t("t_no_export")); return; }
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
     const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
-    a.download = "clipveil-ledger-" + new Date().toISOString().slice(0, 10) + ".json"; a.click();
+    a.download = "maskboard-ledger-" + new Date().toISOString().slice(0, 10) + ".json"; a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
     const s = m.entries.length - data.entries.length;
     toast(t("t_exported", { s: s ? t("t_exported_s", { s }) : "" }));

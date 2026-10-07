@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-ClipVeil masking regression tests.
+MaskBoard masking regression tests.
 
     python tests/test_masking.py            # run
     python tests/test_masking.py --update   # rewrite expected outputs (review the diff first!)
@@ -9,7 +9,7 @@ ClipVeil masking regression tests.
 
 For every sample in tests/fixtures the masked output must equal tests/expected/<name>, leak none of
 the LEAKS values, keep every KEEP value, restore to the original byte for byte, and stay unchanged
-when masked again. When Node is available the web version (clipveil.html) is checked against the
+when masked again. When Node is available the web version (maskboard.html) is checked against the
 same expected files. Only the engine is loaded; no GUI packages are needed.
 """
 import difflib, importlib.util, json, os, re, shutil, subprocess, sys, tempfile, types
@@ -26,7 +26,7 @@ def load_engine():
                 __import__(mod)
             except Exception:
                 sys.modules[mod] = types.ModuleType(mod)
-    spec = importlib.util.spec_from_file_location("clipveil", os.path.join(ROOT, "clipveil.py"))
+    spec = importlib.util.spec_from_file_location("maskboard", os.path.join(ROOT, "maskboard.py"))
     m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
     return m
 
@@ -253,7 +253,7 @@ def check_classify(engine):
 
 
 def check_web():
-    """The web version (clipveil.html) must produce the same output — runs when Node is installed."""
+    """The web version (maskboard.html) must produce the same output — runs when Node is installed."""
     node = shutil.which("node")
     if not node: return None
     r = subprocess.run([node, os.path.join(HERE, "test_web_engine.js")], capture_output=True, text=True, encoding="utf-8")
@@ -301,7 +301,7 @@ def main():
     if not update:
         p = check_web()
         if p is None: print("- web version (node not found, skipped)")
-        else: report("web version gives the same output (clipveil.html)", p)
+        else: report("web version gives the same output (maskboard.html)", p)
     print("\n%s: %d failed" % ("UPDATED" if update else "RESULT", failed))
     return 1 if failed else 0
 

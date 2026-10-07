@@ -1,14 +1,14 @@
-# ClipVeil
+# MaskBoard
 
-ClipVeil masks the sensitive parts of logs and configs before you paste them into
+MaskBoard masks the sensitive parts of logs and configs before you paste them into
 ChatGPT, Claude or any other AI assistant. It replaces IPs, hostnames, domains, users,
 containers, network interfaces, config values and secrets with typed tokens. When the
-AI answers, ClipVeil turns the tokens back into your real values.
+AI answers, MaskBoard turns the tokens back into your real values.
 
-Everything runs on your machine. ClipVeil makes no network connections and no data
+Everything runs on your machine. MaskBoard makes no network connections and no data
 leaves your computer.
 
-![ClipVeil](screenshot.png)
+![MaskBoard](screenshot.png)
 
 ```
 Real:    alice@web01:~/projects/shop$ docker logs shop-web-1
@@ -26,9 +26,9 @@ the tokens are replaced with your real values again.
 
 Two editions share one masking engine and give identical output:
 
-- **Desktop app** (`clipveil.py`): watches the clipboard and masks or restores
+- **Desktop app** (`maskboard.py`): watches the clipboard and masks or restores
   automatically. It also has global hotkeys and a tray icon. Windows, Linux and macOS.
-- **Web page** (`clipveil.html`): one self-contained file you can open in any browser,
+- **Web page** (`maskboard.html`): one self-contained file you can open in any browser,
   with no installation.
 
 Both editions have an English and a Turkish interface. They pick one from your system
@@ -64,12 +64,12 @@ inside an upper-case identifier, so environment variables such as `DB_HOST_1` an
 
 | File | Purpose |
 |---|---|
-| `clipveil.py` | Desktop app: clipboard capture, hotkeys, tray icon |
-| `clipveil.html` | Web page: no installation, open it in a browser |
+| `maskboard.py` | Desktop app: clipboard capture, hotkeys, tray icon |
+| `maskboard.html` | Web page: no installation, open it in a browser |
 | `requirements.txt` | Python packages for the desktop app |
-| `build_windows.bat` | Builds a single `ClipVeil.exe` on Windows |
-| `build_linux.sh` | Builds a single `clipveil` executable on Linux |
-| `clipveil.ico`, `clipveil.png` | App icon |
+| `build_windows.bat` | Builds a single `MaskBoard.exe` on Windows |
+| `build_linux.sh` | Builds a single `maskboard` executable on Linux |
+| `maskboard.ico`, `maskboard.png` | App icon |
 | `tests/` | Regression tests: samples, expected masked output, web parity test |
 
 ## Quick start
@@ -77,7 +77,7 @@ inside an upper-case identifier, so environment variables such as `DB_HOST_1` an
 **Windows / macOS**
 ```bash
 pip install -r requirements.txt
-python clipveil.py
+python maskboard.py
 ```
 
 **Linux** (recent Ubuntu/Debian refuse `pip install` into the system Python, so use a virtual environment)
@@ -85,10 +85,10 @@ python clipveil.py
 sudo apt install python3-tk python3-venv xclip     # Fedora: sudo dnf install python3-tkinter xclip
 python3 -m venv .venv && . .venv/bin/activate
 pip install -r requirements.txt
-python clipveil.py
+python maskboard.py
 ```
 
-**Web:** open `clipveil.html` in a browser.
+**Web:** open `maskboard.html` in a browser.
 
 To use the desktop app without installing Python, see [Building](#building).
 
@@ -104,7 +104,7 @@ shows whether protection is on and what happened last.
 3. Copy the AI's answer (`Ctrl+C`). The tokens turn back into real values.
 4. Paste it into your editor or terminal (`Ctrl+V`).
 
-ClipVeil decides from the content whether a copy is a log or an AI answer. If known
+MaskBoard decides from the content whether a copy is a log or an AI answer. If known
 tokens dominate, it restores the copy. If the copy contains new sensitive values, it
 masks them. When in doubt it masks, so real data never reaches the AI by mistake.
 Copying the same masked text again also triggers a restore.
@@ -146,7 +146,7 @@ minimised, so watching continues.
 
 ## Using the web page
 
-`clipveil.html` uses the same engine as the desktop app. It has no clipboard watching and
+`maskboard.html` uses the same engine as the desktop app. It has no clipboard watching and
 no hotkeys; you paste text and use the buttons (`Ctrl+Enter` masks or restores). The
 ledger lives in the open tab by default. If you tick **Remember in this browser**, the
 ledger is saved in the browser's local storage without secrets, and unticking the box
@@ -210,7 +210,7 @@ alone.
 
 **System accounts** such as `root`, `admin`, `postgres`, `www-data`, `oracle` and `deploy`
 are not masked: they are not sensitive and they help the AI. To hide them too, set
-`MASK_SYSTEM_USERS = True` in `clipveil.py`.
+`MASK_SYSTEM_USERS = True` in `maskboard.py`.
 
 **Secrets.** The following are masked:
 
@@ -267,7 +267,7 @@ them.
 
 ## Custom terms
 
-Type words that ClipVeil cannot know are sensitive, such as a company, a customer or a project
+Type words that MaskBoard cannot know are sensitive, such as a company, a customer or a project
 code, separated by commas: `acme, project-x, Contoso Ltd`. They are remembered between
 sessions.
 
@@ -280,12 +280,14 @@ sessions.
 - A term inside an ordinary word is ignored: `net` does not touch `network` or `dotnet`.
 - Longer terms win over shorter ones when they overlap.
 
-## Upgrading from Anonim Ajan
+## Upgrading from ClipVeil or Anonim Ajan
 
-ClipVeil was previously called *Anonim Ajan*, and the upgrade is automatic:
+MaskBoard was previously called *ClipVeil* and, before that, *Anonim Ajan*. The upgrade is
+automatic:
 
-- The desktop ledger moves from `~/.anonim_ajan.json` to `~/.clipveil.json` on first start.
-- The web page moves a ledger saved in the browser to its new storage key.
+- The desktop ledger moves from `~/.clipveil.json` or `~/.anonim_ajan.json` to
+  `~/.maskboard.json` on first start.
+- The web page moves a ledger and language choice saved in the browser to its new storage keys.
 - Tokens from older releases (`IP_5`, `HOST_10`, `KULLANICI_1`, `PROJE_2`, `PAROLA_1`,
   `AYAR_3`, `OZEL_1`, `TARIH_1`) still restore. They are replaced with the current tokens
   (`IP_PRIV_3`, `IFACE_1`, `USER_1`, `PROJECT_1`, …) the next time the value is masked.
@@ -334,7 +336,7 @@ Further checks cover:
 No GUI packages are needed, and `pytest tests/` works too.
 
 The web page is tested against the same expected files: `tests/test_web_engine.js` extracts
-the engine between `ENGINE START` and `ENGINE END` in `clipveil.html` and runs the same
+the engine between `ENGINE START` and `ENGINE END` in `maskboard.html` and runs the same
 checks. When Node is installed, `python tests/test_masking.py` runs it as well. If you
 change a rule, change it in both engines; the web test fails if one is forgotten. If a test
 fails after a change, read the diff first, and only use `--update` when you are sure the new
@@ -347,8 +349,8 @@ binary on Linux.
 
 **Windows:**
 
-1. Put `build_windows.bat` next to `clipveil.py` and double-click it.
-2. The result is `dist\ClipVeil.exe`, with the icon embedded. It runs on machines without
+1. Put `build_windows.bat` next to `maskboard.py` and double-click it.
+2. The result is `dist\MaskBoard.exe`, with the icon embedded. It runs on machines without
    Python.
 3. If Explorer still shows an old icon, copy the exe to another folder; Windows refreshes
    its icon cache late.
@@ -362,7 +364,7 @@ The script:
 
 - checks the system packages and prints the install command if something is missing;
 - installs the Python packages into `.venv` and leaves the system Python untouched;
-- produces `dist/clipveil`, which runs without Python on Linux machines of the same
+- produces `dist/maskboard`, which runs without Python on Linux machines of the same
   architecture.
 
 Build on a desktop session, not on a headless server: the hotkey modules look for a display
@@ -371,21 +373,21 @@ during the build.
 **Add to the Linux menu and start at login** (after the build, in the same folder):
 ```bash
 mkdir -p ~/.local/bin ~/.local/share/applications ~/.local/share/icons ~/.config/autostart
-cp dist/clipveil ~/.local/bin/
-cp dist/clipveil.png ~/.local/share/icons/
-cat > ~/.local/share/applications/clipveil.desktop <<EOF
+cp dist/maskboard ~/.local/bin/
+cp dist/maskboard.png ~/.local/share/icons/
+cat > ~/.local/share/applications/maskboard.desktop <<EOF
 [Desktop Entry]
 Type=Application
-Name=ClipVeil
+Name=MaskBoard
 Comment=Mask logs and configs before sending them to an AI
-Exec=$HOME/.local/bin/clipveil
-Icon=$HOME/.local/share/icons/clipveil.png
+Exec=$HOME/.local/bin/maskboard
+Icon=$HOME/.local/share/icons/maskboard.png
 Terminal=false
 Categories=Utility;
 EOF
-cp ~/.local/share/applications/clipveil.desktop ~/.config/autostart/
+cp ~/.local/share/applications/maskboard.desktop ~/.config/autostart/
 ```
-To stop it starting at login, delete `~/.config/autostart/clipveil.desktop`.
+To stop it starting at login, delete `~/.config/autostart/maskboard.desktop`.
 
 ## Platform notes
 
@@ -408,7 +410,7 @@ To stop it starting at login, delete `~/.config/autostart/clipveil.desktop`.
 
 ## Data and privacy
 
-- The desktop ledger is stored in `~/.clipveil.json`, so restoring works after a restart.
+- The desktop ledger is stored in `~/.maskboard.json`, so restoring works after a restart.
 - **Passwords, tokens and keys are never written to disk** or included in exports; they
   live in memory while the app runs. After a restart, tokens such as `PASSWORD_1` are no
   longer restored and stay as they are.
@@ -420,7 +422,7 @@ To stop it starting at login, delete `~/.config/autostart/clipveil.desktop`.
 ## Troubleshooting
 
 - **The app does not start:** an error dialog appears, and the details are written to
-  `clipveil-error.log` in your home folder. Sharing that file makes the problem quick to
+  `maskboard-error.log` in your home folder. Sharing that file makes the problem quick to
   find.
 - **Hotkeys don't work:** if the status card shows "✕ Hotkeys", run `pip install pynput`.
   The Auto-watch switch works without hotkeys.

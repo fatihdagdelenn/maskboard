@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /*
- * ClipVeil web version parity tests.
+ * MaskBoard web version parity tests.
  *
- *     node tests/test_web_engine.js                 # test the engine embedded in clipveil.html
+ *     node tests/test_web_engine.js                 # test the engine embedded in maskboard.html
  *     node tests/test_web_engine.js path/engine.js  # test an engine in another file
  *
  * The block between ENGINE START and ENGINE END is extracted and checked against the desktop
@@ -17,11 +17,11 @@ const FIX = path.join(HERE, "fixtures"), EXP = path.join(HERE, "expected");
 const RULES = JSON.parse(fs.readFileSync(path.join(HERE, "rules.json"), "utf8"));
 
 function loadEngine(file) {
-  file = file || path.join(ROOT, "clipveil.html");
+  file = file || path.join(ROOT, "maskboard.html");
   const src = fs.readFileSync(file, "utf8");
   const a = src.indexOf("/* ENGINE START"), b = src.indexOf("/* ENGINE END */");
   if (a < 0 || b < 0) throw new Error(file + ": ENGINE START/END markers not found");
-  return new Function(src.slice(a, b) + "\nreturn ClipVeilEngine;")();
+  return new Function(src.slice(a, b) + "\nreturn MaskBoardEngine;")();
 }
 
 const reEsc = s => s.replace(/[.*+?^${}()|[\]\\\/]/g, "\\$&");

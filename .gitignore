@@ -1,4 +1,6 @@
 # Ledgers and exports contain real IPs, hostnames and emails: never commit them
+.maskboard.json
+maskboard-ledger*.json
 .clipveil.json
 clipveil-ledger*.json
 .anonim_ajan.json

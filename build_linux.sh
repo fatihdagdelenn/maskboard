@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# ClipVeil - Linux build (single executable). Run next to clipveil.py:
+# MaskBoard - Linux build (single executable). Run next to maskboard.py:
 #   chmod +x build_linux.sh && ./build_linux.sh        (other Python: PYTHON=python3.12 ./build_linux.sh)
 set -e
 cd "$(dirname "$0")"
 PY="${PYTHON:-python3}"
-[ -f clipveil.py ] || { echo "ERROR: clipveil.py is not in $(pwd)"; exit 1; }
+[ -f maskboard.py ] || { echo "ERROR: maskboard.py is not in $(pwd)"; exit 1; }
 
 echo "[1/4] Checking system dependencies..."
 MISSING=""
@@ -35,7 +35,7 @@ EXCLUDES=""
 for m in PIL._avif PIL.AvifImagePlugin PIL._webp PIL.WebPImagePlugin PIL._imagingft PIL._imagingcms PIL.ImageCms PIL._imagingmath PIL.ImageMath PIL._imagingmorph PIL.ImageMorph PIL.ImageQt PIL.ImageShow PIL.ImageGrab ssl _ssl _hashlib unittest pydoc doctest lib2to3 distutils setuptools pkg_resources xmlrpc sqlite3 _sqlite3 curses ensurepip venv idlelib turtledemo turtle tkinter.test numpy; do
   EXCLUDES="$EXCLUDES --exclude-module $m"
 done
-python -m PyInstaller --noconfirm --onefile --strip --name clipveil $EXCLUDES \
+python -m PyInstaller --noconfirm --onefile --strip --name maskboard $EXCLUDES \
   --collect-data customtkinter \
   --hidden-import darkdetect \
   --hidden-import PIL._tkinter_finder \
@@ -45,10 +45,10 @@ python -m PyInstaller --noconfirm --onefile --strip --name clipveil $EXCLUDES \
   --hidden-import pystray._appindicator \
   --hidden-import pystray._gtk \
   --collect-submodules Xlib \
-  clipveil.py
-python clipveil.py --export-icon dist/clipveil.png >/dev/null
+  maskboard.py
+python maskboard.py --export-icon dist/maskboard.png >/dev/null
 
 echo "[4/4] Done."
-echo "App:   $(pwd)/dist/clipveil"
-echo "Icon:  $(pwd)/dist/clipveil.png"
-echo "Run:   ./dist/clipveil      (menu entry and autostart: see README)"
+echo "App:   $(pwd)/dist/maskboard"
+echo "Icon:  $(pwd)/dist/maskboard.png"
+echo "Run:   ./dist/maskboard      (menu entry and autostart: see README)"
