@@ -26,7 +26,9 @@ echo.
 echo [2/3] Building the icon and the EXE...
 python clipveil.py --export-icon clipveil.ico || (echo ERROR: icon could not be created & pause & exit /b 1)
 REM customtkinter theme files and the runtime-loaded pynput/pystray backends must be included explicitly.
-python -m PyInstaller --noconfirm --noconsole --onefile --name ClipVeil ^
+REM Excluded: image codecs, fonts and TLS the app never uses, which keeps the exe small.
+set EXCLUDES=--exclude-module PIL._avif --exclude-module PIL.AvifImagePlugin --exclude-module PIL._webp --exclude-module PIL.WebPImagePlugin --exclude-module PIL._imagingft --exclude-module PIL._imagingcms --exclude-module PIL.ImageCms --exclude-module PIL._imagingmath --exclude-module PIL.ImageMath --exclude-module PIL._imagingmorph --exclude-module PIL.ImageMorph --exclude-module PIL.ImageQt --exclude-module PIL.ImageShow --exclude-module PIL.ImageGrab --exclude-module ssl --exclude-module _ssl --exclude-module _hashlib --exclude-module unittest --exclude-module pydoc --exclude-module doctest --exclude-module lib2to3 --exclude-module distutils --exclude-module setuptools --exclude-module pkg_resources --exclude-module xmlrpc --exclude-module sqlite3 --exclude-module _sqlite3 --exclude-module curses --exclude-module ensurepip --exclude-module venv --exclude-module idlelib --exclude-module turtledemo --exclude-module turtle --exclude-module tkinter.test --exclude-module numpy
+python -m PyInstaller --noconfirm --noconsole --onefile --name ClipVeil %EXCLUDES% ^
   --icon clipveil.ico ^
   --collect-data customtkinter ^
   --hidden-import darkdetect ^
