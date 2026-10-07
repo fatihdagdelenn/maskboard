@@ -493,6 +493,21 @@ def _token_fits(text, s, e):
     m = TOKEN_RE.match(text[lo:s] + "CUSTOM_9" + text[e:e + 1], s - lo)
     return bool(m) and m.end() == s - lo + 8
 
+# Custom terms ignore case and Turkish letters: "tuik" also finds "TÜİK", "Tüik" and "TUIK".
+_TR_FOLD = {ch: g for g in ("iıİI", "uüUÜ", "oöOÖ", "cçCÇ", "sşSŞ", "gğGĞ") for ch in g}
+
+def _term_re(term):
+    out = []
+    for ch in term:
+        if ch in _TR_FOLD:
+            out.append("[" + _TR_FOLD[ch] + "]")
+        elif ch.isalpha():
+            variants = {ch} | {v for v in (ch.lower(), ch.upper()) if len(v) == 1}
+            out.append("[" + "".join(sorted(variants)) + "]")
+        else:
+            out.append(re.escape(ch))
+    return re.compile("".join(out))
+
 def _part_break(a, b):
     """Is there an identifier-part boundary between characters a and b (snake_case, camelCase, letter|digit)?"""
     if not (a.isalnum() and b.isalnum()): return True
@@ -771,7 +786,7 @@ class Mapper:
 
         # 8) custom terms (case-insensitive) and national IDs
         for term in sorted([t for t in self.custom_terms if t], key=len, reverse=True):
-            for m in re.finditer(re.escape(term), text, re.I):
+            for m in _term_re(term).finditer(text):
                 span = _custom_span(text, m.start(), m.end())
                 if span: add(span[0], span[1], text[span[0]:span[1]], "custom")
         for m in NATID_RE.finditer(text):
@@ -1690,8 +1705,15 @@ def run_gui(agent):
     retranslate.append(lambda: set_badge(badge_n[0]))
 
     act1 = clear(pa); act1.grid(row=2, column=0, sticky="ew", pady=12)
+    def custom_list(): return [s.strip() for s in custom_entry.get().split(",") if s.strip()]
+    custom_job = [None]
+    def sync_custom(*_):
+        def apply():
+            if custom_list() != agent.mapper.custom_terms: agent.mapper.set_custom(custom_list())
+        if custom_job[0]: root.after_cancel(custom_job[0])
+        custom_job[0] = root.after(300, apply)
     def do_anon():
-        agent.mapper.set_custom([s.strip() for s in custom_entry.get().split(",") if s.strip()])
+        agent.mapper.set_custom(custom_list())
         txt = src.get("1.0", "end-1c")
         if not txt.strip(): return gui.flash(T("need_input"))
         masked, n = agent.mapper.anonymize(txt, get_opts())
@@ -1713,6 +1735,8 @@ def run_gui(agent):
     custom_entry.pack(side="left", fill="x", expand=True, padx=(8, 12))
     if agent.mapper.custom_terms:
         custom_entry.insert(0, ", ".join(agent.mapper.custom_terms))
+    for ev in ("<KeyRelease>", "<FocusOut>"):
+        custom_entry.bind(ev, sync_custom, add=True)
 
     out_card, out_head, masked_out = io_card(pa, "out_title", "out_hint")
     out_card.grid(row=3, column=0, sticky="nsew")

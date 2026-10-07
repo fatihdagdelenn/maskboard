@@ -271,8 +271,10 @@ Type words that MaskBoard cannot know are sensitive, such as a company, a custom
 code, separated by commas: `acme, project-x, Contoso Ltd`. They are remembered between
 sessions.
 
-- Matching ignores case: `acme` finds `ACME`, `Acme` and `acme`. Each spelling gets its own
-  token so the answer restores exactly as written (`ACME` → `CUSTOM_1`, `Acme` → `CUSTOM_2`).
+- Terms apply as soon as you type them, also to auto-watch, the hotkeys and the tray menu.
+- Matching ignores case and Turkish letters: `acme` finds `ACME` and `Acme`; `tuik` finds `TÜİK`,
+  `Tüik` and `TUIK` (ı/i/İ/I, ü/u, ö/o, ç/c, ş/s, ğ/g count as the same letter). Each spelling gets
+  its own token so the answer restores exactly as written (`ACME` → `CUSTOM_1`, `Acme` → `CUSTOM_2`).
 - Whole words match, and so do parts of identifiers: `ACME_Prod` → `CUSTOM_1_Prod`,
   `AcmeUser` → `CUSTOM_2User`, `acme.example.com` → `CUSTOM_3.example.com`.
 - When a token in that position could not be restored (`X_ACME`, `acme2024`, `myAcme`), the

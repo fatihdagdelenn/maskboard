@@ -234,6 +234,13 @@ def check_custom_terms(engine):
     problems = [] if out == want else ["custom terms:\n  got  %s\n  want %s" % (out, want)]
     if m.restore(out)[0] != txt: problems.append("custom terms did not restore")
     if m.anonymize(out)[0] != out: problems.append("masking twice changed the text")
+    m = engine.Mapper(store=None)
+    m.set_custom(["tuik", "ısparta"])
+    txt = "TÜİK raporu, Tüik, TUIK_Sistem, tuik.gov.tr, ISPARTA, Isparta, ıspartalı"
+    want = "CUSTOM_1 raporu, CUSTOM_2, CUSTOM_3_Sistem, CUSTOM_4.gov.tr, CUSTOM_5, CUSTOM_6, ıspartalı"
+    out, _ = m.anonymize(txt)
+    if out != want: problems.append("Turkish letters:\n  got  %s\n  want %s" % (out, want))
+    if m.restore(out)[0] != txt: problems.append("Turkish custom terms did not restore")
     return problems
 
 

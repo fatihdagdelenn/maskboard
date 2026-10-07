@@ -768,6 +768,21 @@ const MaskBoardEngine = (function () {
     return !!m && m[0].length === 8;
   }
   const isAlnum = ch => /[\p{L}\p{N}]/u.test(ch), isAlpha = ch => /\p{L}/u.test(ch);
+  // Custom terms ignore case and Turkish letters: "tuik" also finds "TÜİK", "Tüik" and "TUIK".
+  const TR_FOLD = {};
+  for (const g of ["iıİI", "uüUÜ", "oöOÖ", "cçCÇ", "sşSŞ", "gğGĞ"]) for (const ch of g) TR_FOLD[ch] = g;
+  function termRe(term) {
+    let src = "";
+    for (const ch of term) {
+      if (TR_FOLD[ch]) src += "[" + TR_FOLD[ch] + "]";
+      else if (isAlpha(ch)) {
+        const v = new Set([ch]);
+        for (const x of [ch.toLowerCase(), ch.toUpperCase()]) if ([...x].length === 1) v.add(x);
+        src += "[" + [...v].sort().join("") + "]";
+      } else src += esc(ch);
+    }
+    return G(src);
+  }
   /** identifier-part boundary between a and b (snake_case, camelCase, letter|digit) */
   function partBreak(a, b) {
     if (!(isAlnum(a) && isAlnum(b))) return true;
@@ -1023,7 +1038,7 @@ const MaskBoardEngine = (function () {
 
       // 8) custom terms (case-insensitive) and national IDs
       for (const term of this.customTerms.filter(t => t).sort((a, b) => b.length - a.length))
-        for (const m of all(G(esc(term), "i"), text)) {
+        for (const m of all(termRe(term), text)) {
           const span = customSpan(text, m.index, m.index + m[0].length);
           if (span) add(span[0], span[1], text.slice(span[0], span[1]), "custom");
         }
@@ -1429,6 +1444,7 @@ const MaskBoardEngine = (function () {
   }
   const hideSmart = () => $("smart").classList.remove("show");
   $("src").addEventListener("input", () => { clearTimeout(smartTimer); smartTimer = setTimeout(checkSmart, 250); });
+  $("customTerms").addEventListener("input", () => { m.setCustom(customList()); clearTimeout(smartTimer); smartTimer = setTimeout(checkSmart, 250); });
   $("btnMoveToReply").onclick = () => {
     $("reply").value = $("src").value; $("src").value = ""; hideSmart(); restore();
     $("reply").scrollIntoView({ behavior: "smooth", block: "center" });

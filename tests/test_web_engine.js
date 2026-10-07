@@ -200,6 +200,13 @@ function checkCustomTerms(E) {
   const problems = out === want ? [] : ["custom terms:\n  got  " + out + "\n  want " + want];
   if (m.restore(out)[0] !== txt) problems.push("custom terms did not restore");
   if (m.anonymize(out)[0] !== out) problems.push("masking twice changed the text");
+  const t = new E.Mapper(null);
+  t.setCustom(["tuik", "ısparta"]);
+  const ttxt = "TÜİK raporu, Tüik, TUIK_Sistem, tuik.gov.tr, ISPARTA, Isparta, ıspartalı";
+  const twant = "CUSTOM_1 raporu, CUSTOM_2, CUSTOM_3_Sistem, CUSTOM_4.gov.tr, CUSTOM_5, CUSTOM_6, ıspartalı";
+  const [tout] = t.anonymize(ttxt);
+  if (tout !== twant) problems.push("Turkish letters:\n  got  " + tout + "\n  want " + twant);
+  if (t.restore(tout)[0] !== ttxt) problems.push("Turkish custom terms did not restore");
   return problems;
 }
 
