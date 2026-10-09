@@ -1121,7 +1121,8 @@ STRINGS = {
         "menu_cut": "Cut", "menu_copy": "Copy", "menu_paste": "Paste", "menu_all": "Select all",
         "term_need": "Select a word or phrase first.", "term_token": "That is already a token.",
         "term_added": "Added to custom terms: {s}", "term_exists": "Already a custom term: {s}",
-        "btn_open": "Open file…", "busy": "Working on {size}…",
+        "btn_open": "Open file…", "busy": "Working on {size}…", "on_clip": " · on the clipboard",
+        "terms_updated": "Custom terms updated", "cats": "Categories",
         "file_masked": "Saved {name} — {n} items masked.", "file_masked_1": "Saved {name} — 1 item masked.",
         "file_restored": "Saved {name} — {n} values restored. It contains real data.",
         "file_restored_1": "Saved {name} — 1 value restored. It contains real data.",
@@ -1209,7 +1210,8 @@ STRINGS = {
         "menu_cut": "Kes", "menu_copy": "Kopyala", "menu_paste": "Yapıştır", "menu_all": "Tümünü seç",
         "term_need": "Önce bir kelime ya da ifade seç.", "term_token": "Bu zaten bir etiket.",
         "term_added": "Özel terimlere eklendi: {s}", "term_exists": "Zaten özel terimlerde: {s}",
-        "btn_open": "Dosya aç…", "busy": "{size} işleniyor…",
+        "btn_open": "Dosya aç…", "busy": "{size} işleniyor…", "on_clip": " · panoda",
+        "terms_updated": "Özel terimler güncellendi", "cats": "Kategoriler",
         "file_masked": "{name} kaydedildi — {n} öğe maskelendi.",
         "file_restored": "{name} kaydedildi — {n} değer geri çevrildi. Gerçek veri içerir.",
         "file_bad": "{name} okunamadı: {e}", "file_not_saved": "Kaydedilmedi — sonuç kutularda.",
@@ -1579,7 +1581,7 @@ def run_gui(agent):
         max_h = int(root.winfo_screenheight() / sc) - 90
     except Exception:
         sc, max_h = 1.0, 820
-    root.geometry("1000x%d" % min(800, max_h)); root.minsize(860, min(640, max_h))
+    root.geometry("1060x%d" % min(880, max_h)); root.minsize(860, min(600, max_h))
 
     fams = set(tkfont.families(root))
     def pick(*names): return next((n for n in names if n in fams), None)
@@ -1645,7 +1647,7 @@ def run_gui(agent):
     def textbox(master):
         t = ctk.CTkTextbox(master, height=90, fg_color=INK, border_width=1, border_color=BORDER, corner_radius=10,
                            text_color=TEXT, font=ctk.CTkFont(family=MONO, size=12), wrap="word",
-                           border_spacing=10, scrollbar_button_color=BORDER, scrollbar_button_hover_color=BORDER2)
+                           border_spacing=8, scrollbar_button_color=BORDER, scrollbar_button_hover_color=BORDER2)
         t.bind("<FocusIn>", lambda e: t.configure(border_color=TEAL_LINE), add=True)
         t.bind("<FocusOut>", lambda e: t.configure(border_color=BORDER), add=True)
         try:   # tab stops every 4 characters, as in code editors
@@ -1757,16 +1759,17 @@ def run_gui(agent):
             tb.bind(ev, popup, add=True)
 
     # ---------- header ----------
-    header = clear(root); header.pack(fill="x", padx=26, pady=(22, 14))
+    header = clear(root); header.pack(fill="x", padx=26, pady=(14, 10))
     if PILImage is not None:
         try:
-            logo = ctk.CTkImage(light_image=app_icon(128), dark_image=app_icon(128), size=(42, 42))
+            logo = ctk.CTkImage(light_image=app_icon(128), dark_image=app_icon(128), size=(34, 34))
             ctk.CTkLabel(header, text="", image=logo).pack(side="left")
         except Exception as ex:
             print("Logo unavailable:", ex)
     title_box = clear(header); title_box.pack(side="left", padx=(12, 0))
-    ctk.CTkLabel(title_box, text=APP_NAME, font=F(21, "bold", UI_D), text_color=TEXT, anchor="w").pack(anchor="w")
-    tx(ctk.CTkLabel(title_box, font=F(12), text_color=MUTED, anchor="w"), "tagline").pack(anchor="w")
+    ctk.CTkLabel(title_box, text=APP_NAME, font=F(18, "bold", UI_D), text_color=TEXT, anchor="w",
+                 height=22).pack(anchor="w")
+    tx(ctk.CTkLabel(title_box, font=F(11), text_color=MUTED, anchor="w", height=16), "tagline").pack(anchor="w")
 
     def on_lang(code):
         set_lang(code.lower())
@@ -1788,14 +1791,12 @@ def run_gui(agent):
         mode_seg.set(T(MODE_KEYS[agent.mode])); on_mode(mode_seg.get())
 
     # ---------- status card ----------
+    # ---------- status strip: one line, so the text boxes get the height ----------
     hero = card(root); hero.pack(fill="x", padx=26)
-    top = clear(hero); top.pack(fill="x", padx=20, pady=(16, 0))
-    dot = ctk.CTkLabel(top, text="●", font=F(20), text_color=TEAL, width=22); dot.pack(side="left", anchor="n")
-    tbox = clear(top); tbox.pack(side="left", padx=(8, 0), fill="x", expand=True)
-    hero_title = ctk.CTkLabel(tbox, text="", font=F(16, "bold", UI_D), text_color=TEXT, anchor="w")
-    hero_title.pack(anchor="w")
-    hero_sub = ctk.CTkLabel(tbox, text="", font=F(12), text_color=MUTED, anchor="w", justify="left")
-    hero_sub.pack(anchor="w", fill="x")
+    top = clear(hero); top.pack(fill="x", padx=14, pady=7)
+    dot = ctk.CTkLabel(top, text="●", font=F(15), text_color=TEAL, width=16); dot.pack(side="left")
+    hero_title = ctk.CTkLabel(top, text="", font=F(13, "bold", UI_D), text_color=TEXT, anchor="w")
+    hero_title.pack(side="left", padx=(6, 0))
 
     auto_var = tk.BooleanVar(value=False)
     def set_auto(value, quiet=False):
@@ -1806,35 +1807,33 @@ def run_gui(agent):
             if not quiet: gui.flash(T("auto_on" if agent.auto else "auto_off"))
         root.after(0, _)
     auto_sw = ctk.CTkSwitch(top, variable=auto_var, onvalue=True, offvalue=False,
-                            command=lambda: set_auto(auto_var.get()), switch_width=54, switch_height=28,
+                            command=lambda: set_auto(auto_var.get()), switch_width=44, switch_height=22,
                             progress_color=TEAL, fg_color=BORDER2, button_color="#F2F6FB",
-                            button_hover_color="#FFFFFF", font=F(13, "bold"), text_color=TEXT)
+                            button_hover_color="#FFFFFF", font=F(12, "bold"), text_color=TEXT)
     tx(auto_sw, "auto").pack(side="right")
-
-    ctk.CTkFrame(hero, height=1, fg_color=BORDER).pack(fill="x", padx=20, pady=(14, 0))
-    hb = clear(hero); hb.pack(fill="x", padx=20, pady=(10, 14))
-    caps_box = clear(hb); caps_box.pack(side="right")
-    last_lbl = tx(ctk.CTkLabel(hb, font=F(12), text_color=MUTED, anchor="w"), "ready")
-    last_lbl.pack(side="left", fill="x", expand=True)
+    caps_box = ctk.CTkFrame(top, fg_color="transparent", width=1, height=1); caps_box.pack(side="right", padx=(0, 12))
+    last_lbl = tx(ctk.CTkLabel(top, font=F(12), text_color=MUTED, anchor="w"), "ready")
+    last_lbl.pack(side="left", fill="x", expand=True, padx=(14, 8))
     caps = []
     def draw_caps():
+        """Only what is missing is shown; when everything works the strip stays clean."""
         for w in caps_box.winfo_children(): w.destroy()
         for key, ok in caps:
-            ctk.CTkLabel(caps_box, text=("  ✓  %s  " if ok else "  ✕  %s  ") % T(key), height=24, corner_radius=12,
-                         font=F(11, "bold"), fg_color=(TEAL_BG if ok else SURF2),
-                         text_color=(TEAL if ok else FAINT)).pack(side="left", padx=(6, 0))
+            if not ok:
+                ctk.CTkLabel(caps_box, text="  ✕  %s  " % T(key), height=22, corner_radius=11, font=F(10, "bold"),
+                             fg_color=CORAL_BG, text_color=CORAL).pack(side="left", padx=(6, 0))
 
     # ---------- tabs ----------
-    tabbar = clear(root); tabbar.pack(fill="x", padx=26, pady=(18, 12))
+    tabbar = clear(root); tabbar.pack(fill="x", padx=26, pady=(12, 8))
     PAGES = ["tab_mask", "tab_restore", "tab_ledger"]
     current = [PAGES[0]]
     tabs = segmented(tabbar, [T(k) for k in PAGES], lambda label: show_page(
-        next((k for k in PAGES if T(k) == label), PAGES[0])), 38)
+        next((k for k in PAGES if T(k) == label), PAGES[0])), 34)
     tabs.pack(side="left")
     ledger_badge = ctk.CTkLabel(tabbar, text="", font=F(12), text_color=FAINT)
     ledger_badge.pack(side="left", padx=(12, 0))
 
-    content = clear(root); content.pack(fill="both", expand=True, padx=26, pady=(0, 22))
+    content = clear(root); content.pack(fill="both", expand=True, padx=26, pady=(0, 16))
     content.grid_rowconfigure(0, weight=1); content.grid_columnconfigure(0, weight=1)
     pages = {}
     for key in PAGES:
@@ -1842,41 +1841,60 @@ def run_gui(agent):
     def show_page(key):
         current[0] = key; pages[key].tkraise()
         if tabs.get() != T(key): tabs.set(T(key))
+        if key == "tab_mask": cats_btn.pack(side="right")
+        else: cats_btn.pack_forget()
 
     def io_card(master, title_key, hint_key):
         c = card(master)
-        h = clear(c); h.pack(fill="x", padx=16, pady=(12, 8))
+        h = clear(c); h.pack(fill="x", padx=14, pady=(7, 5))
         tx(ctk.CTkLabel(h, font=F(12, "bold"), text_color=TEXT, anchor="w"), title_key).pack(side="left")
         tx(ctk.CTkLabel(h, font=F(12), text_color=FAINT, anchor="w"), hint_key, fmt="  ·  %s").pack(side="left")
-        t = textbox(c); t.pack(fill="both", expand=True, padx=12, pady=(0, 12))
+        t = textbox(c); t.pack(fill="both", expand=True, padx=10, pady=(0, 10))
         return c, h, t
 
     # ===== Mask =====
     pa = pages["tab_mask"]
     pa.grid_columnconfigure(0, weight=1)
     pa.grid_rowconfigure(1, weight=1, uniform="io"); pa.grid_rowconfigure(3, weight=1, uniform="io")
-    chiprow = clear(pa); chiprow.grid(row=0, column=0, sticky="ew", pady=(0, 10))
+    chiprow = clear(pa); chiprow.grid(row=0, column=0, sticky="ew", pady=(0, 8))
     CHIP_GROUPS = [("grp_net", ("ipv4", "ipv6", "domain", "url", "hostname", "mac", "iface")),
                    ("grp_id", ("user", "email", "natid", "container", "config", "secret", "date", "custom"))]
     optvars = {}
     def make_chip(parent, t):
         v = tk.BooleanVar(value=t not in DEFAULT_OFF); optvars[t] = v
-        b = ctk.CTkButton(parent, text=type_label(t), width=10, height=30, corner_radius=15, font=F(11, "bold"),
+        b = ctk.CTkButton(parent, text=type_label(t), width=10, height=26, corner_radius=13, font=F(11, "bold"),
                           border_width=1)
         def paint():
             on = v.get()
             b.configure(fg_color=(TEAL_BG if on else "transparent"), hover_color=(TEAL_LINE if on else SURF2),
                         border_color=(TEAL_LINE if on else BORDER), text_color=(TEAL if on else FAINT))
-        b.configure(command=lambda: (v.set(not v.get()), paint()))
+        b.configure(command=lambda: (v.set(not v.get()), paint(), cats_text()))
         retranslate.append(lambda: b.configure(text=type_label(t)))
         paint(); return b
     for gi, (gkey, types_) in enumerate(CHIP_GROUPS):
-        row = clear(chiprow); row.pack(fill="x", pady=(0 if gi == 0 else 6, 0))
-        tx(ctk.CTkLabel(row, font=F(11), text_color=FAINT, width=120, anchor="w"), gkey).pack(side="left")
+        row = clear(chiprow); row.pack(fill="x", pady=(0 if gi == 0 else 5, 0))
+        tx(ctk.CTkLabel(row, font=F(11), text_color=FAINT, width=110, anchor="w"), gkey).pack(side="left")
         for t in types_:
             make_chip(row, t).pack(side="left", padx=(0, 6))
     def get_opts(): return {t: optvars[t].get() for t in ALL_TYPES}
     agent.get_opts = get_opts
+    # categories fold away behind one button; the button shows how many are on
+    cats_open = [bool(agent.mapper.settings.get("cats_open", False))]
+    cats_btn = ctk.CTkButton(tabbar, text="", width=10, height=30, corner_radius=9, font=F(12, "bold"),
+                             **BTN["secondary"])
+    def cats_text():
+        on = sum(v.get() for v in optvars.values())
+        cats_btn.configure(text="%s  %d/%d  %s" % (T("cats"), on, len(optvars), "▴" if cats_open[0] else "▾"))
+    def show_cats():
+        if cats_open[0]: chiprow.grid()
+        else: chiprow.grid_remove()
+        cats_text()
+    def toggle_cats():
+        cats_open[0] = not cats_open[0]; show_cats()
+        agent.mapper.settings["cats_open"] = cats_open[0]; agent.mapper.save()
+    cats_btn.configure(command=toggle_cats)
+    retranslate.append(cats_text)
+    show_cats()
 
     in_card, in_head, src = io_card(pa, "in_title", "in_hint")
     in_card.grid(row=1, column=0, sticky="nsew")
@@ -1889,15 +1907,28 @@ def run_gui(agent):
         out_badge.configure(text="  %s  " % T("badge", n=n)); out_badge.pack(side="right")
     retranslate.append(lambda: set_badge(badge_n[0]))
 
-    act1 = clear(pa); act1.grid(row=2, column=0, sticky="ew", pady=12)
-    def do_anon(note=""):
+    act1 = clear(pa); act1.grid(row=2, column=0, sticky="ew", pady=8)
+    out_on_clip = [False]      # the masked output was put on the clipboard: keep it there after re-masking
+    def clip_holds(text):
+        try:
+            cur = pyperclip.paste() if pyperclip else root.clipboard_get()
+        except Exception:
+            return False
+        return _norm(cur) == _norm(text)
+    def do_anon(note="", implicit=False):
+        """implicit: re-mask nobody asked for (terms edited) — only refresh the clipboard if it still
+        holds the previous masked text."""
         sync_terms(now=True)
+        prev = masked_out.get("1.0", "end-1c")
         txt = src.get("1.0", "end-1c")
         if not txt.strip(): return gui.flash(T("need_input"))
         opts = get_opts()
         def done(masked, n):
             show_fakes(masked_out, masked); gui.refresh(); set_badge(n)
             msg = (T("badge", n=n) if note else T("masked_n", n=n)) if n else T("nothing_masked")
+            if (agent.auto or out_on_clip[0]) and (not implicit or clip_holds(prev)):
+                put_clipboard(masked); out_on_clip[0] = True
+                msg = (T("badge", n=n) if n else T("nothing_masked")) + T("on_clip")
             gui.flash(note + msg, "ok" if n else "info")
         busy_run(lambda: agent.mapper.anonymize(txt, opts), done, len(txt))
     def open_file(kind):
@@ -1932,10 +1963,11 @@ def run_gui(agent):
     def copy_masked():
         t = masked_out.get("1.0", "end-1c")
         if not t.strip(): return gui.flash(T("no_output"))
-        put_clipboard(t); gui.flash(T("copied_masked"), "ok")
+        put_clipboard(t); out_on_clip[0] = True; gui.flash(T("copied_masked"), "ok")
     def clear_in():
-        src.delete("1.0", "end"); masked_out.delete("1.0", "end"); set_badge(None); gui.flash(T("cleared"))
-    btn(act1, "btn_mask", lambda: do_anon(), "primary", width=170, height=42).pack(side="left")
+        src.delete("1.0", "end"); masked_out.delete("1.0", "end"); set_badge(None); out_on_clip[0] = False
+        gui.flash(T("cleared"))
+    btn(act1, "btn_mask", lambda: do_anon(), "primary", width=160, height=36).pack(side="left")
     ctk.CTkLabel(act1, text="Ctrl+Enter", font=F(11), text_color=FAINT).pack(side="left", padx=12)
     btn(act1, "btn_clear", clear_in, "ghost", width=90, height=34).pack(side="right")
     btn(act1, "btn_open", lambda: open_file("mask"), "secondary", width=120, height=34).pack(side="right", padx=(0, 8))
@@ -1952,7 +1984,7 @@ def run_gui(agent):
     pr.grid_rowconfigure(0, weight=1, uniform="io"); pr.grid_rowconfigure(2, weight=1, uniform="io")
     rin_card, _, reply = io_card(pr, "reply_title", "reply_hint")
     rin_card.grid(row=0, column=0, sticky="nsew")
-    act2 = clear(pr); act2.grid(row=1, column=0, sticky="ew", pady=12)
+    act2 = clear(pr); act2.grid(row=1, column=0, sticky="ew", pady=8)
     def do_restore():
         txt = reply.get("1.0", "end-1c")
         if not txt.strip(): return gui.flash(T("need_reply"))
@@ -1964,7 +1996,7 @@ def run_gui(agent):
         put_clipboard(t); gui.flash(T("copied_real"), "real")
     def clear_rest():
         reply.delete("1.0", "end"); restored_out.delete("1.0", "end"); gui.flash(T("cleared"))
-    btn(act2, "btn_restore", do_restore, "primary", width=170, height=42).pack(side="left")
+    btn(act2, "btn_restore", do_restore, "primary", width=160, height=36).pack(side="left")
     ctk.CTkLabel(act2, text="Ctrl+Enter", font=F(11), text_color=FAINT).pack(side="left", padx=12)
     btn(act2, "btn_clear", clear_rest, "ghost", width=90, height=34).pack(side="right")
     btn(act2, "btn_open", lambda: open_file("restore"), "secondary", width=120, height=34).pack(side="right", padx=(0, 8))
@@ -2025,16 +2057,19 @@ def run_gui(agent):
     def show_terms_count(): terms_count.configure(text=T("terms_count", n=len(agent.mapper.custom_terms)))
     retranslate.append(show_terms_count)
     terms_job = [None]
-    def sync_terms(*_, now=False):
+    def sync_terms(*_, now=False, remask=False):
         def apply():
             terms_job[0] = None
-            if terms_list() != agent.mapper.custom_terms: agent.mapper.set_custom(terms_list())
+            changed = terms_list() != agent.mapper.custom_terms
+            if changed: agent.mapper.set_custom(terms_list())
             show_terms_count()
+            if changed and remask and src.get("1.0", "end-1c").strip() and masked_out.get("1.0", "end-1c").strip():
+                do_anon(T("terms_updated") + " · ", implicit=True)
         if terms_job[0]: root.after_cancel(terms_job[0]); terms_job[0] = None
         if now: apply()
         else: terms_job[0] = root.after(300, apply)
-    for ev in ("<KeyRelease>", "<FocusOut>"):
-        terms_box.bind(ev, sync_terms, add=True)
+    terms_box.bind("<KeyRelease>", sync_terms, add=True)
+    terms_box.bind("<FocusOut>", lambda e: sync_terms(now=True, remask=True), add=True)
 
     def add_selection(tb):
         term = norm_term(selection(tb))
@@ -2105,8 +2140,6 @@ def run_gui(agent):
                 if auto_var.get() != agent.auto: auto_var.set(agent.auto)
                 dot.configure(text_color=TEAL if agent.auto else FAINT)
                 hero_title.configure(text=T("hero_on" if agent.auto else "hero_off"))
-                hero_sub.configure(text=T(("hero_on_smart" if agent.mode == "smart" else "hero_on_mask")
-                                          if agent.auto else "hero_off_sub"))
             root.after(0, _)
         def flash(self, msg, tone="info"):
             stamp = time.strftime("%H:%M")
@@ -2118,6 +2151,7 @@ def run_gui(agent):
                     self.flash(T("cap_restore", n=n) if n else T("cap_restore_0"), "real" if n else "info")
                 else:
                     show_page("tab_mask"); set_text(src, original); show_fakes(masked_out, result); set_badge(n)
+                    out_on_clip[0] = True
                     self.flash(T("cap_mask", n=n) if n else T("cap_mask_0"), "ok" if n else "info")
             root.after(0, _)
     gui = Gui(); agent.gui = gui

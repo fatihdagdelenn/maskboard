@@ -96,13 +96,19 @@ To use the desktop app without installing Python, see [Building](#building).
 
 ### Automatic: copy and paste
 
-When the clipboard is available, **Auto-watch** turns on at startup. The status card
-shows whether protection is on and what happened last.
+When the clipboard is available, **Auto-watch** turns on at startup. The status line under
+the header shows whether protection is on and what happened last; it only lists missing
+features (clipboard, hotkeys, tray) when something is not available.
 
 1. Copy a log (`Ctrl+C`). The clipboard now holds the masked version.
 2. Paste it into the AI (`Ctrl+V`).
 3. Copy the AI's answer (`Ctrl+C`). The tokens turn back into real values.
 4. Paste it into your editor or terminal (`Ctrl+V`).
+
+If you spot something that should also be hidden, select it in the input and press `Alt+M`.
+The text is masked again and the clipboard is updated at once, so you don't need to copy the
+log a second time. The same happens after *Mask* or `Ctrl+Enter` while auto-watch is on, or
+once you have used *Copy*.
 
 MaskBoard decides from the content whether a copy is a log or an AI answer. If known
 tokens dominate, it restores the copy. If the copy contains new sensitive values, it
@@ -124,7 +130,8 @@ The **Mode** switch changes this behaviour:
   reset. Secrets appear as `••••••••`. The **Custom terms** list sits next to the table.
 
 Categories are grouped as **Network** (IPv4, IPv6, DNS, URL, Host, MAC, Interface) and
-**Identity & secrets** (User, Email, National ID, Container, Config, Secret, Date, Custom). All of
+**Identity & secrets** (User, Email, National ID, Container, Config, Secret, Date, Custom). They
+are folded behind the **Categories 14/15** button so the text boxes get the space. All of
 them except Date are on by default; turn off any that masks too much. For words that are not
 detected automatically, such as a company name, select them in the input and press `Alt+M`
 or right-click → *Add to custom terms* (see [Custom terms](#custom-terms)).
@@ -306,7 +313,9 @@ panel (web), one per line. Long names and phrases with spaces or commas are fine
 (in the browser only when *Remember in this browser* is on).
 
 The quickest way to add one: select it in the input, then press `Alt+M` or right-click →
-*Add to custom terms*. The input is masked again at once.
+*Add to custom terms*. The input is masked again at once, and if the masked text was on the
+clipboard (auto-watch or *Copy*), the clipboard gets the new version. Editing the list and
+leaving it masks the input again too.
 
 - Terms apply as soon as you type them, also to auto-watch, the hotkeys and the tray menu.
 - Spaces inside a term match any run of spaces, tabs or line breaks, so `Acme Holding` also
@@ -466,7 +475,7 @@ To stop it starting at login, delete `~/.config/autostart/maskboard.desktop`.
 - **The app does not start:** an error dialog appears, and the details are written to
   `maskboard-error.log` in your home folder. Sharing that file makes the problem quick to
   find.
-- **Hotkeys don't work:** if the status card shows "✕ Hotkeys", run `pip install pynput`.
+- **Hotkeys don't work:** if the status line shows "✕ Hotkeys", run `pip install pynput`.
   The Auto-watch switch works without hotkeys.
 - **"✕ Clipboard":** `pip install pyperclip`; on Linux also `sudo apt install xclip`.
 - **Nothing happens when copying:** Auto-watch must be on, and the text must contain

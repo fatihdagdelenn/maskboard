@@ -197,6 +197,8 @@
   .tag{white-space:nowrap}
   td.c-fake{word-break:normal;white-space:nowrap}
   textarea,pre.render{tab-size:4;-moz-tab-size:4}
+  #src,#reply{min-height:260px}
+  pre.render{max-height:520px}
   textarea.drop{border-color:var(--act);box-shadow:0 0 0 3px rgba(79,179,217,.25);background:#0f1822}
   .file-chip{display:none;align-items:center;gap:8px;margin-top:8px;font-family:var(--mono);font-size:11.5px;
     color:var(--text-dim)}
@@ -1353,7 +1355,7 @@ const MaskBoardEngine = (function () {
       btn_open: "Open file", btn_save: "Download", file_detach: "Forget the file (keep the text)",
       file_chip: "File: {name} · {size}{enc}", t_file_bad: "{name} does not look like a text file.",
       t_file_saved: "{name} downloaded.", t_file_saved_real: "{name} downloaded — it contains real values.",
-      t_busy: "Working on {size}…",
+      t_busy: "Working on {size}…", t_on_clip: " · copied again", t_terms_updated: "Custom terms updated",
       btn_mask: "Mask", btn_copy_masked: "Copy masked text", btn_clear: "Clear",
       masked_label: "Masked output — send this to the AI", safe: "SAFE", masked_n: "{n} VALUES MASKED",
       empty_out: "The result appears here.",
@@ -1407,7 +1409,7 @@ const MaskBoardEngine = (function () {
       btn_open: "Dosya aç", btn_save: "İndir", file_detach: "Dosyayı bırak (metin kalsın)",
       file_chip: "Dosya: {name} · {size}{enc}", t_file_bad: "{name} bir metin dosyası gibi görünmüyor.",
       t_file_saved: "{name} indirildi.", t_file_saved_real: "{name} indirildi — gerçek değerler içerir.",
-      t_busy: "{size} işleniyor…",
+      t_busy: "{size} işleniyor…", t_on_clip: " · yeniden kopyalandı", t_terms_updated: "Özel terimler güncellendi",
       btn_mask: "Anonimleştir", btn_copy_masked: "Maskeli metni kopyala", btn_clear: "Temizle",
       masked_label: "Maskeli çıktı — bunu AI'a gönder", safe: "GÜVENLİ", masked_n: "{n} DEĞER MASKELENDİ",
       empty_out: "Sonuç burada görünecek.",
@@ -1524,6 +1526,7 @@ const MaskBoardEngine = (function () {
   // ---------- mask ----------
   let lastCount = null;
   const setMaskedCount = n => { lastCount = n; $("maskedCount").textContent = n ? t("masked_n", { n }) : t("safe"); };
+  let outCopied = false;     // the masked output was copied: copy it again after re-masking
   function anonymize(note) {
     const text = fileText("src");
     if (!text.trim()) { toast(t("t_need_src")); return; }
@@ -1537,7 +1540,9 @@ const MaskBoardEngine = (function () {
       $("btnCopyMasked").disabled = $("btnSaveMasked").disabled = !out.length;
       setMaskedCount(n); hideSmart(); renderLedger(); updateStatus();
       const added = m.entries.length - before;
-      toast((note || "") + (n ? t("t_masked", { n }) + (added ? t("t_new", { a: added }) : "") : t("t_nothing")));
+      let msg = (note || "") + (n ? t("t_masked", { n }) + (added ? t("t_new", { a: added }) : "") : t("t_nothing"));
+      if (outCopied && out) { copyText(out); msg += t("t_on_clip"); }      // keep the clipboard in step
+      toast(msg);
     });
   }
   /** large texts: show a busy note first so the page paints before the work blocks it */
@@ -1703,6 +1708,10 @@ const MaskBoardEngine = (function () {
   const hideSmart = () => $("smart").classList.remove("show");
   $("src").addEventListener("input", () => { clearTimeout(smartTimer); smartTimer = setTimeout(checkSmart, 250); });
   $("customTerms").addEventListener("input", () => { m.setCustom(customList()); showTermCount(); clearTimeout(smartTimer); smartTimer = setTimeout(checkSmart, 250); });
+  // leaving the list after an edit masks the input again, so the output never lags behind the terms
+  $("customTerms").addEventListener("change", () => {
+    if ($("src").value.trim() && $("masked").dataset.plain) anonymize(t("t_terms_updated") + " · ");
+  });
   $("btnMoveToReply").onclick = () => {
     $("reply").value = $("src").value; $("src").value = ""; hideSmart(); restore();
     $("reply").scrollIntoView({ behavior: "smooth", block: "center" });
@@ -1808,10 +1817,10 @@ const MaskBoardEngine = (function () {
   const bump = el => { el.classList.remove("bump"); void el.offsetWidth; el.classList.add("bump"); };
   $("btnMask").onclick = () => anonymize();
   $("btnRestore").onclick = restore;
-  $("btnCopyMasked").onclick = () => copyFrom("masked", "w_masked");
+  $("btnCopyMasked").onclick = () => { outCopied = true; copyFrom("masked", "w_masked"); };
   $("btnCopyRestored").onclick = () => copyFrom("restored", "w_result");
   $("btnClearIn").onclick = () => {
-    $("src").value = ""; $("masked").innerHTML = ""; $("masked").dataset.plain = ""; files.src = null; showFileChips();
+    $("src").value = ""; $("masked").innerHTML = ""; $("masked").dataset.plain = ""; files.src = null; showFileChips(); outCopied = false;
     $("btnCopyMasked").disabled = $("btnSaveMasked").disabled = true; setMaskedCount(null); hideSmart(); updateStatus(); toast(t("t_cleared_in"));
   };
   $("btnClearReply").onclick = () => {
