@@ -332,8 +332,8 @@ HOST_BLOCK = set(["md5","md2","md4","sha1","sha2","sha3","sha224","sha256","sha3
     "rsa1024","rsa2048","rsa4096","nistp256","nistp384","nistp521","secp256r1","secp384r1","prime256v1",
     "aes128","aes192","aes256","chacha20","poly1305","overlay2","cgroup2","cgroupv2","netns0","el7",
     "el8","el9","fc38","fc39","fc40","win10","win11","dotnet6","dotnet8","node18","node20","node22"])
-KW_RE = re.compile(r"\b(?:hostname|nodename|node|computername|computer|dnsname|host|cn)\b\s*[:=]\s*[\"']?"
-                   r"([A-Za-z][A-Za-z0-9\-]{1,62})[\"']?", re.I)
+KW_RE = re.compile(r"\b(?P<k>hostname|nodename|node|computername|computer|dnsname|host|cn)\b\s*[:=]\s*[\"']?"
+                   r"(?P<v>[A-Za-z][A-Za-z0-9\-]{1,62})[\"']?", re.I)
 TOK_RE = re.compile(r"\b[A-Za-z][A-Za-z0-9]*(?:-[A-Za-z0-9]+)*\b")
 # Log noise that looks like a host: thread-12, pool-3, port8080 …
 HOST_NOISE = {"thread","threads","pool","worker","workers","task","tasks","exec","executor",
@@ -457,6 +457,48 @@ def default_opts(): return {t: t not in DEFAULT_OFF for t in ALL_TYPES}
 OPT_OF = {"project": "container"}
 
 
+# ---- source code: an unquoted value that is a call, an index or an attribute is code, not data ----
+CODE_RECEIVERS = {"self", "this", "cls", "os", "sys", "args", "opts", "options", "cfg", "conf", "config",
+                  "settings", "env", "environ", "process", "request", "req", "ctx", "context", "params",
+                  "kwargs", "props", "obj", "conn", "window", "document", "module", "exports", "system"}
+CODE_WORDS = {"self", "this", "cls", "none", "true", "false", "null", "nil", "undefined"}
+CODE_CHAIN_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*")
+CODE_CALL_RE = re.compile(r"\((?:\)|[A-Za-z_\"'*\[{])|\[(?:\]|[A-Za-z0-9_\"'])")
+
+def _call_end(text, i):
+    """End of the call or index opened at text[i], or -1 when it does not close on this line."""
+    depth, q = 0, None
+    while i < len(text):
+        ch = text[i]
+        if ch == "\n": return -1
+        if q:
+            if ch == "\\": i += 1
+            elif ch == q: q = None
+        elif ch in "\"'": q = ch
+        elif ch in "([{": depth += 1
+        elif ch in ")]}":
+            depth -= 1
+            if depth == 0: return i + 1
+        i += 1
+    return -1
+
+def _code_value(text, s, v, key=None):
+    """True for get_user(), os.environ["X"], cfg.host, self.schema or host=host: code, not a value."""
+    if s > 0 and text[s - 1] in "\"'`": return False
+    m = CODE_CHAIN_RE.match(text, s)
+    if not m: return False
+    chain, e = m.group(0), m.end()
+    if e < s + len(v) and text[e] not in "([": return False
+    low = chain.lower()
+    if low in CODE_WORDS or (key and low == key.lower()): return True
+    if CODE_CALL_RE.match(text, e):
+        end = _call_end(text, e)
+        if end >= 0 and not re.match(r"[A-Za-z0-9_]", text[end:end + 1]): return True
+    if "." in chain and not (_valid_domain(chain) or _benign_domain(chain)):
+        return chain.split(".", 1)[0].lower() in CODE_RECEIVERS
+    return False
+
+
 def _user_ok(v):
     if not v or len(v) < 2 or v.isdigit() or is_token(v): return False
     low = v.lower()
@@ -494,12 +536,25 @@ def _token_fits(text, s, e):
     return bool(m) and m.end() == s - lo + 8
 
 # Custom terms ignore case and Turkish letters: "tuik" also finds "TÜİK", "Tüik" and "TUIK".
+# A space in a term matches any run of spaces, tabs or line breaks ("Acme  Corp", "Acme\nCorp").
 _TR_FOLD = {ch: g for g in ("iıİI", "uüUÜ", "oöOÖ", "cçCÇ", "sşSŞ", "gğGĞ") for ch in g}
+_TERM_SPACE = "[ \\t\\r\\n\\u00a0]+"
+
+def norm_term(t):
+    return re.sub(_TERM_SPACE, " ", t or "").strip(" ")
+
+def norm_terms(terms):
+    out = []
+    for t in map(norm_term, terms or []):
+        if t and t not in out: out.append(t)
+    return out
 
 def _term_re(term):
     out = []
     for ch in term:
-        if ch in _TR_FOLD:
+        if ch == " ":
+            out.append(_TERM_SPACE)
+        elif ch in _TR_FOLD:
             out.append("[" + _TR_FOLD[ch] + "]")
         elif ch.isalpha():
             variants = {ch} | {v for v in (ch.lower(), ch.upper()) if len(v) == 1}
@@ -630,6 +685,7 @@ class Mapper:
                 v = m.group(g)
                 if g == "v2": v = v.rstrip(".:")
                 if key in ("PWD", "OLDPWD") and v.startswith("/"): continue
+                if g == "v2" and _code_value(text, m.start(g), v, key): continue
                 if _secret_ok(v, p): add_secret(m.start(g), v, p)
             for m in SECRET_CLI_RE.finditer(text):
                 p = _secret_prefix(m.group("core")); v = m.group("v")
@@ -706,7 +762,9 @@ class Mapper:
             add_user(m.start("u"), m.group("u"))
         for m in USER_KV_RE.finditer(text):
             g = "v1" if m.group("v1") is not None else "v2"
-            add_user(m.start(g), m.group(g).rstrip(".:"))
+            v = m.group(g).rstrip(".:")
+            if g == "v2" and _code_value(text, m.start(g), v, m.group("key")): continue
+            add_user(m.start(g), v)
         for m in USER_ID_RE.finditer(text):
             for u in USER_ID_ONE.finditer(m.group(0)):
                 add_user(m.start() + u.start("u"), u.group("u"))
@@ -819,7 +877,8 @@ class Mapper:
         if on("hostname"):
             seen = set()
             for m in KW_RE.finditer(text):
-                name = m.group(1); s = m.start() + m.group(0).rfind(name)
+                name = m.group("v"); s = m.start("v")
+                if _code_value(text, s, name, m.group("k")): continue
                 if (s, s + len(name)) not in seen and _host_label_ok(name):
                     seen.add((s, s + len(name)))
                     add(s, s + len(name), name, "hostname", prop=not re.search(r"\d", name))
@@ -831,16 +890,19 @@ class Mapper:
                 if re.match(r"\"\s*:", text[m.end():m.end() + 3]): continue      # JSON key
                 if re.fullmatch(r"[0-9a-fA-F]{1,4}", t) and text[m.end():m.end() + 1] == ":": continue
                 if m.start() - 1 in ends and text[m.start() - 1] in "-_": continue  # PROJECT_1-web-1
-                if _looks_like_host(t): add(m.start(), m.end(), t, "hostname")
+                if _looks_like_host(t) and not _code_value(text, m.start(), t):
+                    add(m.start(), m.end(), t, "hostname")
         if on("config"):
             values = dict(conn_dbs)
             for rx in (CFG_FREE_RE, CFG_STRICT_RE):
                 for m in rx.finditer(text):
                     val = re.sub(r"[:.]+$", "", m.group(2) or "")
+                    if _code_value(text, m.start(2), val, m.group(1)): continue
                     if len(val) >= 2 and val.lower() not in CFG_STOP and not is_token(val):
                         values.setdefault(val, _cfg_prefix(m.group(1)))
             for m in CFG_ENV_RE.finditer(text):
                 val = re.sub(r"[:.]+$", "", m.group("v"))
+                if _code_value(text, m.start("v"), val, m.group("key")): continue
                 if len(val) >= 2 and val.lower() not in CFG_STOP and not is_token(val):
                     values.setdefault(val, _cfg_prefix(m.group("key")))
             for v, p in values.items():
@@ -950,7 +1012,7 @@ class Mapper:
 
     def set_custom(self, terms):
         with self.lock:
-            self.custom_terms = terms; self.save()
+            self.custom_terms = norm_terms(terms); self.save()
 
     def save(self):
         if not self.store: return
@@ -964,7 +1026,7 @@ class Mapper:
         if not self.store or not os.path.exists(self.store): return
         try:
             with open(self.store, encoding="utf-8") as f: d = json.load(f)
-            self.custom_terms = d.get("custom_terms", [])
+            self.custom_terms = norm_terms(d.get("custom_terms", []))
             self.settings = d.get("settings", {}) or {}
             self.counters = {k: int(v) for k, v in d.get("counters", {}).items()}
             for e in d.get("entries", []):
@@ -984,6 +1046,47 @@ class Mapper:
     def clear(self):
         with self.lock:
             self._reset(); self.save()
+
+
+# =====================================================================
+#  TEXT FILES — read and write keeping encoding, BOM and line endings
+# =====================================================================
+TEXT_FILETYPES = [("Text", "*.txt *.log *.csv *.tsv *.json *.yaml *.yml *.conf *.cfg *.ini *.env *.xml "
+                           "*.properties *.sql *.md *.py *.js *.ts *.java *.sh *.ps1"), ("*", "*")]
+
+def read_text_file(path):
+    """(text, encoding) with line endings untouched. Raises ValueError for binary files."""
+    with open(path, "rb") as f: raw = f.read()
+    if raw.startswith(b"\xef\xbb\xbf"): return raw.decode("utf-8-sig"), "utf-8-sig"
+    if raw.startswith((b"\xff\xfe", b"\xfe\xff")): return raw.decode("utf-16"), "utf-16"
+    if b"\x00" in raw[:8192]: raise ValueError("not a text file")
+    for enc in ("utf-8", "cp1254"):
+        try: return raw.decode(enc), enc
+        except UnicodeDecodeError: pass
+    return raw.decode("latin-1"), "latin-1"
+
+def write_text_file(path, text, encoding="utf-8"):
+    """Write text as is (no newline translation); falls back to UTF-8 when a value does not fit the encoding.
+    Returns the encoding used."""
+    try:
+        data = text.encode(encoding)
+    except UnicodeEncodeError:
+        encoding = "utf-8"; data = text.encode(encoding)
+    with open(path, "wb") as f: f.write(data)
+    return encoding
+
+HIGHLIGHT_MAX = 600_000    # characters: larger outputs are shown without token colouring
+BUSY_MIN = 150_000         # characters: larger texts are processed in the background
+
+def human_size(chars):
+    return "%.1f MB" % (chars / 1e6) if chars >= 1e6 else "%d KB" % max(1, round(chars / 1e3))
+
+def derived_path(path, tag):
+    """'logs/app.log' → 'logs/app.masked.log'; 'app.masked.log' + 'restored' → 'app.restored.log'."""
+    folder, name = os.path.split(path)
+    stem, ext = os.path.splitext(name)
+    stem = re.sub(r"\.(?:masked|restored)$", "", stem)
+    return os.path.join(folder, "%s.%s%s" % (stem, tag, ext))
 
 
 # =====================================================================
@@ -1010,7 +1113,20 @@ STRINGS = {
         "in_title": "Input", "in_hint": "log, config, error output",
         "out_title": "Text for the AI", "out_hint": "masked",
         "btn_mask": "Mask", "btn_restore": "Restore", "btn_clear": "Clear", "btn_copy": "Copy", "btn_ok": "OK",
-        "custom_ph": "Custom terms (company, project code…), comma separated",
+        "terms_title": "Custom terms", "terms_count": "{n} terms", "terms_count_1": "1 term",
+        "terms_hint": "One per line — company, product or project names, long phrases too. Matched as whole words "
+                      "and identifier parts (ACME_Prod, AcmeUser); case, Turkish letters and extra spaces are ignored. "
+                      "Tip: select text in the input and press Alt+M or right-click.",
+        "menu_add": "Add “{s}” to custom terms", "menu_add_none": "Add selection to custom terms",
+        "menu_cut": "Cut", "menu_copy": "Copy", "menu_paste": "Paste", "menu_all": "Select all",
+        "term_need": "Select a word or phrase first.", "term_token": "That is already a token.",
+        "term_added": "Added to custom terms: {s}", "term_exists": "Already a custom term: {s}",
+        "btn_open": "Open file…", "busy": "Working on {size}…",
+        "file_masked": "Saved {name} — {n} items masked.", "file_masked_1": "Saved {name} — 1 item masked.",
+        "file_restored": "Saved {name} — {n} values restored. It contains real data.",
+        "file_restored_1": "Saved {name} — 1 value restored. It contains real data.",
+        "file_bad": "Could not read {name}: {e}", "file_not_saved": "Not saved — the result is in the boxes.",
+        "file_utf8": " Saved as UTF-8.",
         "need_input": "Paste some text into the input box first.",
         "masked_n": "{n} items masked — use Copy to take it.", "masked_n_1": "1 item masked — use Copy to take it.",
         "nothing_masked": "Nothing sensitive found.", "no_output": "Nothing to copy yet.",
@@ -1036,7 +1152,8 @@ STRINGS = {
         "cap_clip": "Clipboard", "cap_keys": "Hotkeys", "cap_tray": "Tray", "cap_recopy": "Re-copy",
         "keys_title": "Keyboard shortcuts",
         "key_mask": "Mask the clipboard", "key_restore": "Restore the clipboard",
-        "key_auto": "Toggle auto-watch", "key_box": "Process the focused box", "key_quit": "Quit",
+        "key_auto": "Toggle auto-watch", "key_box": "Process the focused box",
+        "key_add": "Add the selected text to custom terms", "key_quit": "Quit",
         "keys_note": "With auto-watch on you don't need hotkeys: copy a log and it is masked, "
                      "copy the AI's answer and it comes back with real values.",
         "keys_missing": "Global hotkeys are off: pynput is not installed (pip install pynput). ",
@@ -1084,7 +1201,19 @@ STRINGS = {
         "out_title": "AI'a gidecek metin", "out_hint": "maskeli",
         "btn_mask": "Anonimleştir", "btn_restore": "Geri çevir", "btn_clear": "Temizle", "btn_copy": "Kopyala",
         "btn_ok": "Tamam",
-        "custom_ph": "Özel terimler (firma adı, proje kodu…), virgülle",
+        "terms_title": "Özel terimler", "terms_count": "{n} terim",
+        "terms_hint": "Her satıra bir terim — firma, ürün ya da proje adı; uzun ifadeler de olur. Tam kelime ve "
+                      "tanımlayıcı parçası olarak bulunur (ACME_Prod, AcmeUser); büyük/küçük harf, Türkçe harfler ve "
+                      "fazla boşluklar önemsizdir. İpucu: girişte metni seçip Alt+M'ye bas ya da sağ tıkla.",
+        "menu_add": "“{s}” özel terimlere ekle", "menu_add_none": "Seçimi özel terimlere ekle",
+        "menu_cut": "Kes", "menu_copy": "Kopyala", "menu_paste": "Yapıştır", "menu_all": "Tümünü seç",
+        "term_need": "Önce bir kelime ya da ifade seç.", "term_token": "Bu zaten bir etiket.",
+        "term_added": "Özel terimlere eklendi: {s}", "term_exists": "Zaten özel terimlerde: {s}",
+        "btn_open": "Dosya aç…", "busy": "{size} işleniyor…",
+        "file_masked": "{name} kaydedildi — {n} öğe maskelendi.",
+        "file_restored": "{name} kaydedildi — {n} değer geri çevrildi. Gerçek veri içerir.",
+        "file_bad": "{name} okunamadı: {e}", "file_not_saved": "Kaydedilmedi — sonuç kutularda.",
+        "file_utf8": " UTF-8 olarak kaydedildi.",
         "need_input": "Önce giriş kutusuna bir metin yapıştır.",
         "masked_n": "{n} öğe maskelendi — Kopyala ile al.",
         "nothing_masked": "Maskelenecek bir değer bulunamadı.", "no_output": "Kopyalanacak çıktı yok.",
@@ -1110,7 +1239,8 @@ STRINGS = {
         "cap_clip": "Pano", "cap_keys": "Kısayol", "cap_tray": "Tepsi", "cap_recopy": "Tekrar-kopya",
         "keys_title": "Klavye kısayolları",
         "key_mask": "Panodaki metni anonimleştir", "key_restore": "Panodaki metni geri çevir",
-        "key_auto": "Oto-izlemeyi aç / kapat", "key_box": "Kutudaki metni işle", "key_quit": "Uygulamadan çık",
+        "key_auto": "Oto-izlemeyi aç / kapat", "key_box": "Kutudaki metni işle",
+        "key_add": "Seçili metni özel terimlere ekle", "key_quit": "Uygulamadan çık",
         "keys_note": "Oto-izle açıkken kısayola gerek yok: log kopyala → maskelenir, "
                      "AI cevabını kopyala → gerçek değerlere döner.",
         "keys_missing": "Global kısayollar kapalı: pynput paketi yok (pip install pynput). ",
@@ -1518,26 +1648,32 @@ def run_gui(agent):
                            border_spacing=10, scrollbar_button_color=BORDER, scrollbar_button_hover_color=BORDER2)
         t.bind("<FocusIn>", lambda e: t.configure(border_color=TEAL_LINE), add=True)
         t.bind("<FocusOut>", lambda e: t.configure(border_color=BORDER), add=True)
+        try:   # tab stops every 4 characters, as in code editors
+            t._textbox.configure(tabs=(tkfont.Font(font=t._textbox.cget("font")).measure("    "),))
+        except Exception:
+            pass
         return t
 
     def set_text(tb, s):
         tb.delete("1.0", "end"); tb.insert("1.0", s)
 
     def show_fakes(tb, text):
+        text = text.replace("\r\n", "\n")
         set_text(tb, text)
+        if len(text) > HIGHLIGHT_MAX: return
         for m in TOKEN_RE.finditer(text):
             tb.tag_add("fake", "1.0+%dc" % m.start(), "1.0+%dc" % m.end())
 
     def show_restored(tb, text):
         """Restore with markers, then highlight exactly the restored spans."""
-        marked, n = agent.mapper.restore(text, wrap=lambda r: "\x00" + r + "\x01")
+        marked, n = agent.mapper.restore(text.replace("\r\n", "\n"), wrap=lambda r: "\x00" + r + "\x01")
         plain, spans, pos = [], [], 0
         for part in re.split(r"(\x00[\s\S]*?\x01)", marked):
             if part.startswith("\x00"):
                 part = part[1:-1]; spans.append((pos, pos + len(part)))
             plain.append(part); pos += len(part)
         set_text(tb, "".join(plain))
-        for s, e in spans:
+        for s, e in (spans if pos <= HIGHLIGHT_MAX else []):
             tb.tag_add("real", "1.0+%dc" % s, "1.0+%dc" % e)
         return "".join(plain), n
 
@@ -1550,7 +1686,8 @@ def run_gui(agent):
         ctk.CTkLabel(body, text=T("keys_title"), font=F(17, "bold", UI_D), text_color=TEXT,
                      anchor="w").pack(anchor="w", pady=(0, 14))
         rows = [(("Ctrl", "Alt", "A"), "key_mask"), (("Ctrl", "Alt", "R"), "key_restore"),
-                (("Ctrl", "Alt", "T"), "key_auto"), (("Ctrl", "Enter"), "key_box"), (("Ctrl", "Q"), "key_quit")]
+                (("Ctrl", "Alt", "T"), "key_auto"), (("Ctrl", "Enter"), "key_box"), (("Alt", "M"), "key_add"),
+                (("Ctrl", "Q"), "key_quit")]
         grid = clear(body); grid.pack(fill="x")
         for row, (keys, desc) in enumerate(rows):
             kf = clear(grid); kf.grid(row=row, column=0, sticky="w", pady=4)
@@ -1570,6 +1707,54 @@ def run_gui(agent):
         y = root.winfo_rooty() + (root.winfo_height() - win.winfo_reqheight()) // 3
         win.geometry("+%d+%d" % (max(x, 0), max(y, 0)))
         win.lift(); win.focus_force()
+
+    def selection(tb):
+        try:
+            return tb.get("sel.first", "sel.last")
+        except Exception:
+            return ""
+
+    def busy_run(work, done, size):
+        """Run work() in the background for large texts so the window stays responsive."""
+        if size < BUSY_MIN:
+            return done(*work())
+        gui.flash(T("busy", size=human_size(size)))
+        root.configure(cursor="watch")
+        def job():
+            try:
+                res = work(); root.after(0, lambda: (root.configure(cursor=""), done(*res)))
+            except Exception as ex:
+                root.after(0, lambda: (root.configure(cursor=""), gui.flash(T("error", e=ex), "warn")))
+        threading.Thread(target=job, daemon=True).start()
+
+    def context_menu(tb, editable=False, add_term=None):
+        """Right-click menu for a text box; add_term adds the selection to the custom terms."""
+        menu = tk.Menu(root, tearoff=0, bg=SURF2, fg=TEXT, activebackground=SEL_H, activeforeground=TEXT,
+                       disabledforeground=FAINT, bd=0, relief="flat", font=(UI, 10))
+        def popup(e):
+            menu.delete(0, "end")
+            sel = selection(tb)
+            if add_term:
+                short = " ".join(sel.split())
+                short = short if len(short) <= 40 else short[:38] + "…"
+                menu.add_command(label=T("menu_add", s=short) if short else T("menu_add_none"),
+                                 accelerator="Alt+M", command=add_term, state="normal" if short else "disabled")
+                menu.add_separator()
+            if editable:
+                menu.add_command(label=T("menu_cut"), accelerator="Ctrl+X", state="normal" if sel else "disabled",
+                                 command=lambda: tb._textbox.event_generate("<<Cut>>"))
+            menu.add_command(label=T("menu_copy"), accelerator="Ctrl+C", state="normal" if sel else "disabled",
+                             command=lambda: tb._textbox.event_generate("<<Copy>>"))
+            if editable:
+                menu.add_command(label=T("menu_paste"), accelerator="Ctrl+V",
+                                 command=lambda: tb._textbox.event_generate("<<Paste>>"))
+            menu.add_command(label=T("menu_all"), accelerator="Ctrl+A",
+                             command=lambda: (tb.tag_add("sel", "1.0", "end-1c"), tb.focus_set()))
+            try: menu.tk_popup(e.x_root, e.y_root)
+            finally: menu.grab_release()
+            return "break"
+        for ev in (("<Button-2>", "<Control-Button-1>") if sys.platform == "darwin" else ("<Button-3>",)):
+            tb.bind(ev, popup, add=True)
 
     # ---------- header ----------
     header = clear(root); header.pack(fill="x", padx=26, pady=(22, 14))
@@ -1705,38 +1890,55 @@ def run_gui(agent):
     retranslate.append(lambda: set_badge(badge_n[0]))
 
     act1 = clear(pa); act1.grid(row=2, column=0, sticky="ew", pady=12)
-    def custom_list(): return [s.strip() for s in custom_entry.get().split(",") if s.strip()]
-    custom_job = [None]
-    def sync_custom(*_):
-        def apply():
-            if custom_list() != agent.mapper.custom_terms: agent.mapper.set_custom(custom_list())
-        if custom_job[0]: root.after_cancel(custom_job[0])
-        custom_job[0] = root.after(300, apply)
-    def do_anon():
-        agent.mapper.set_custom(custom_list())
+    def do_anon(note=""):
+        sync_terms(now=True)
         txt = src.get("1.0", "end-1c")
         if not txt.strip(): return gui.flash(T("need_input"))
-        masked, n = agent.mapper.anonymize(txt, get_opts())
-        show_fakes(masked_out, masked); gui.refresh(); set_badge(n)
-        gui.flash(T("masked_n", n=n) if n else T("nothing_masked"), "ok" if n else "info")
+        opts = get_opts()
+        def done(masked, n):
+            show_fakes(masked_out, masked); gui.refresh(); set_badge(n)
+            msg = (T("badge", n=n) if note else T("masked_n", n=n)) if n else T("nothing_masked")
+            gui.flash(note + msg, "ok" if n else "info")
+        busy_run(lambda: agent.mapper.anonymize(txt, opts), done, len(txt))
+    def open_file(kind):
+        """Mask or restore a text file: the result is shown and saved next to it as name.masked.ext."""
+        p = filedialog.askopenfilename(parent=root, filetypes=TEXT_FILETYPES)
+        if not p: return
+        try:
+            text, enc = read_text_file(p)
+        except Exception as ex:
+            return gui.flash(T("file_bad", name=os.path.basename(p), e=ex), "warn")
+        sync_terms(now=True)
+        opts = get_opts()
+        work = (lambda: agent.mapper.anonymize(text, opts)) if kind == "mask" else (lambda: agent.mapper.restore(text))
+        def done(out, n):
+            if kind == "mask":
+                show_page("tab_mask"); set_text(src, text.replace("\r\n", "\n")); show_fakes(masked_out, out)
+                set_badge(n)
+            else:
+                show_page("tab_restore"); set_text(reply, text.replace("\r\n", "\n")); show_restored(restored_out, text)
+            gui.refresh()
+            tag = "masked" if kind == "mask" else "restored"
+            target = derived_path(p, tag)
+            q = filedialog.asksaveasfilename(parent=root, initialdir=os.path.dirname(target),
+                                             initialfile=os.path.basename(target),
+                                             defaultextension=os.path.splitext(p)[1], filetypes=TEXT_FILETYPES)
+            if not q: return gui.flash(T("file_not_saved"))
+            used = write_text_file(q, out, enc)
+            note = T("file_utf8") if used != enc and enc not in ("utf-8", "utf-8-sig") else ""
+            key = "file_masked" if kind == "mask" else "file_restored"
+            gui.flash(T(key, name=os.path.basename(q), n=n) + note, "ok" if kind == "mask" else "real")
+        busy_run(work, done, len(text))
     def copy_masked():
         t = masked_out.get("1.0", "end-1c")
         if not t.strip(): return gui.flash(T("no_output"))
         put_clipboard(t); gui.flash(T("copied_masked"), "ok")
     def clear_in():
         src.delete("1.0", "end"); masked_out.delete("1.0", "end"); set_badge(None); gui.flash(T("cleared"))
-    btn(act1, "btn_mask", do_anon, "primary", width=170, height=42).pack(side="left")
+    btn(act1, "btn_mask", lambda: do_anon(), "primary", width=170, height=42).pack(side="left")
     ctk.CTkLabel(act1, text="Ctrl+Enter", font=F(11), text_color=FAINT).pack(side="left", padx=12)
     btn(act1, "btn_clear", clear_in, "ghost", width=90, height=34).pack(side="right")
-    custom_entry = ctk.CTkEntry(act1, height=34, corner_radius=9, border_width=1, border_color=BORDER,
-                                fg_color=INK, text_color=TEXT, font=F(12), width=150,
-                                placeholder_text=T("custom_ph"), placeholder_text_color=FAINT)
-    tx(custom_entry, "custom_ph", "placeholder_text")
-    custom_entry.pack(side="left", fill="x", expand=True, padx=(8, 12))
-    if agent.mapper.custom_terms:
-        custom_entry.insert(0, ", ".join(agent.mapper.custom_terms))
-    for ev in ("<KeyRelease>", "<FocusOut>"):
-        custom_entry.bind(ev, sync_custom, add=True)
+    btn(act1, "btn_open", lambda: open_file("mask"), "secondary", width=120, height=34).pack(side="right", padx=(0, 8))
 
     out_card, out_head, masked_out = io_card(pa, "out_title", "out_hint")
     out_card.grid(row=3, column=0, sticky="nsew")
@@ -1765,6 +1967,7 @@ def run_gui(agent):
     btn(act2, "btn_restore", do_restore, "primary", width=170, height=42).pack(side="left")
     ctk.CTkLabel(act2, text="Ctrl+Enter", font=F(11), text_color=FAINT).pack(side="left", padx=12)
     btn(act2, "btn_clear", clear_rest, "ghost", width=90, height=34).pack(side="right")
+    btn(act2, "btn_open", lambda: open_file("restore"), "secondary", width=120, height=34).pack(side="right", padx=(0, 8))
     rout_card, rout_head, restored_out = io_card(pr, "real_title", "real_hint")
     rout_card.grid(row=2, column=0, sticky="nsew")
     btn(rout_head, "btn_copy", copy_restored, "danger", width=92, height=30).pack(side="right")
@@ -1806,7 +2009,58 @@ def run_gui(agent):
     btn(bar, "import", do_import, "secondary", width=100).pack(side="right", padx=(0, 8))
     btn(bar, "export", do_export, "secondary", width=100).pack(side="right", padx=(0, 8))
 
-    led_card = card(pd); led_card.pack(fill="both", expand=True)
+    led_row = clear(pd); led_row.pack(fill="both", expand=True)
+    terms_card = card(led_row); terms_card.pack(side="right", fill="y", padx=(12, 0))
+    th = clear(terms_card); th.pack(fill="x", padx=16, pady=(12, 8))
+    tx(ctk.CTkLabel(th, font=F(12, "bold"), text_color=TEXT, anchor="w"), "terms_title").pack(side="left")
+    terms_count = ctk.CTkLabel(th, text="", font=F(11), text_color=FAINT); terms_count.pack(side="right")
+    terms_box = textbox(terms_card); terms_box.configure(width=270)
+    terms_box.pack(fill="both", expand=True, padx=12)
+    terms_hint = tx(ctk.CTkLabel(terms_card, font=F(11), text_color=FAINT, justify="left", anchor="w",
+                                 wraplength=262), "terms_hint")
+    terms_hint.pack(fill="x", padx=16, pady=(8, 12))
+    set_text(terms_box, "\n".join(agent.mapper.custom_terms))
+
+    def terms_list(): return norm_terms(terms_box.get("1.0", "end-1c").split("\n"))
+    def show_terms_count(): terms_count.configure(text=T("terms_count", n=len(agent.mapper.custom_terms)))
+    retranslate.append(show_terms_count)
+    terms_job = [None]
+    def sync_terms(*_, now=False):
+        def apply():
+            terms_job[0] = None
+            if terms_list() != agent.mapper.custom_terms: agent.mapper.set_custom(terms_list())
+            show_terms_count()
+        if terms_job[0]: root.after_cancel(terms_job[0]); terms_job[0] = None
+        if now: apply()
+        else: terms_job[0] = root.after(300, apply)
+    for ev in ("<KeyRelease>", "<FocusOut>"):
+        terms_box.bind(ev, sync_terms, add=True)
+
+    def add_selection(tb):
+        term = norm_term(selection(tb))
+        if not term: return gui.flash(T("term_need"), "warn")
+        if is_token(term): return gui.flash(T("term_token"), "warn")
+        sync_terms(now=True)
+        known = {t.casefold() for t in agent.mapper.custom_terms}
+        if term.casefold() in known:
+            note = T("term_exists", s=term)
+        else:
+            cur = terms_box.get("1.0", "end-1c")
+            terms_box.insert("end", ("\n" if cur and not cur.endswith("\n") else "") + term)
+            sync_terms(now=True)
+            note = T("term_added", s=term)
+        if src.get("1.0", "end-1c").strip():
+            show_page("tab_mask"); do_anon(note + " · ")
+        else:
+            gui.flash(note, "ok")
+        return "break"
+    for tb in (src, masked_out):
+        context_menu(tb, editable=(tb is src), add_term=lambda tb=tb: add_selection(tb))
+        for ev in ("<Alt-m>", "<Alt-M>"):
+            tb.bind(ev, lambda e, tb=tb: add_selection(tb), add=True)
+    context_menu(reply, editable=True); context_menu(restored_out); context_menu(terms_box, editable=True)
+
+    led_card = card(led_row); led_card.pack(side="left", fill="both", expand=True)
     style = ttk.Style(root)
     try: style.theme_use("clam")
     except Exception: pass

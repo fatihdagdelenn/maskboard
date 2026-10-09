@@ -207,6 +207,15 @@ function checkCustomTerms(E) {
   const [tout] = t.anonymize(ttxt);
   if (tout !== twant) problems.push("Turkish letters:\n  got  " + tout + "\n  want " + twant);
   if (t.restore(tout)[0] !== ttxt) problems.push("Turkish custom terms did not restore");
+  const w = new E.Mapper(null);
+  w.setCustom(["  Acme   Corp ", "Acme Corp", "Big Data, Inc."]);
+  if (JSON.stringify(w.customTerms) !== JSON.stringify(["Acme Corp", "Big Data, Inc."]))
+    problems.push("terms not normalised: " + JSON.stringify(w.customTerms));
+  const wtxt = "ACME corp, Acme\n  Corp\tLtd, big data, inc. report, Acme Corporation";
+  const wwant = "CUSTOM_1, CUSTOM_2\tLtd, CUSTOM_3 report, Acme Corporation";
+  const [wout] = w.anonymize(wtxt);
+  if (wout !== wwant) problems.push("multi-word terms:\n  got  " + JSON.stringify(wout) + "\n  want " + JSON.stringify(wwant));
+  if (w.restore(wout)[0] !== wtxt) problems.push("multi-word terms did not restore");
   return problems;
 }
 

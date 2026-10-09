@@ -52,7 +52,7 @@ or browser language, and you can switch between them at any time.
 | `DS_n`, `JNDI_n`, `DB_n`, `SCHEMA_n`, `CONFIG_n` | Datasource, JNDI, database, schema and other config values | `datasource billing` → `datasource DS_1` |
 | `PASSWORD_n`, `TOKEN_n`, `SECRET_n` | Passwords, tokens, private keys | `password: Hunter2!` → `password: PASSWORD_1` |
 | `DATE_n` | Dates (optional) | `2026-10-01` → `DATE_1` |
-| `CUSTOM_n` | Terms you type into the custom terms box | `ACME Ltd.` → `CUSTOM_1` |
+| `CUSTOM_n` | Terms from your custom terms list | `ACME Ltd.` → `CUSTOM_1` |
 
 Tokens are deliberately not wrapped in `<…>`. Chat interfaces render answers as HTML, so
 `<url1>` can disappear on screen, and it looks like a tag inside XML configs. A plain
@@ -117,15 +117,17 @@ The **Mode** switch changes this behaviour:
 ### Manual: tabs
 
 - **Mask:** paste a log, choose the categories, press *Mask* (or `Ctrl+Enter`), then *Copy*.
+  *Open file…* masks a whole text file instead (see [Masking files](#masking-files)).
 - **Restore:** paste the AI's answer, press *Restore* (or `Ctrl+Enter`), then *Copy*.
+  *Open file…* restores a masked file.
 - **Ledger:** the real ↔ token table, newest first, with search, export, import and
-  reset. Secrets appear as `••••••••`.
+  reset. Secrets appear as `••••••••`. The **Custom terms** list sits next to the table.
 
 Categories are grouped as **Network** (IPv4, IPv6, DNS, URL, Host, MAC, Interface) and
 **Identity & secrets** (User, Email, National ID, Container, Config, Secret, Date, Custom). All of
-them except Date are on by default; turn off any that masks too much. Use the **custom terms**
-box for words that are not detected automatically, such as a company name (see
-[Custom terms](#custom-terms)).
+them except Date are on by default; turn off any that masks too much. For words that are not
+detected automatically, such as a company name, select them in the input and press `Alt+M`
+or right-click → *Add to custom terms* (see [Custom terms](#custom-terms)).
 
 The **EN | TR** switch in the header changes the interface language immediately. The
 choice is remembered.
@@ -138,6 +140,7 @@ choice is remembered.
 | `Ctrl+Alt+R` | Restore the clipboard |
 | `Ctrl+Alt+T` | Toggle auto-watch |
 | `Ctrl+Enter` | Process the focused box (inside the window) |
+| `Alt+M` | Add the selected text to the custom terms and mask again (inside the window) |
 | `Ctrl+Q` | Quit (inside the window) |
 
 The `Ctrl+Alt` hotkeys work in every application and need the `pynput` package. Closing
@@ -152,7 +155,30 @@ ledger lives in the open tab by default. If you tick **Remember in this browser*
 ledger is saved in the browser's local storage without secrets, and unticking the box
 deletes the saved copy. If you paste a tokenized AI answer into the left box, the page
 notices and offers to move it to the Restore box. Ledgers exported from the desktop app
-can be imported, and the other way round.
+can be imported, and the other way round. Text files can be opened or dropped on either
+box, and the result downloaded (see [Masking files](#masking-files)). Select text in the input and
+press `Alt+M` or right-click to add it to the custom terms; `Shift` + right-click still opens
+the browser's own menu.
+
+### Masking files
+
+*Open file* masks a `.txt`, `.log`, `.csv`, `.json`, `.yaml`, `.conf`, `.env` or any other text
+file. The desktop app asks where to save the result and suggests `name.masked.ext` next to the
+original; the web page offers it as a download. Restoring works the same way and suggests
+`name.restored.ext`, which contains real values again.
+
+The file is masked exactly like pasted text, and everything else stays byte for byte:
+indentation, tabs, blank lines, `\r\n` or `\n` line endings and the UTF-8 byte-order mark.
+UTF-8 and Windows-1254 (Turkish) files are recognised. The desktop app writes the result in
+the original encoding; the web page always writes UTF-8.
+
+### How much text
+
+There is no size limit. Masking takes about 0.4 s per 100 KB in the desktop app and about
+0.1 s in the web page, so a 1 MB log takes a few seconds on the desktop and about one second
+in the browser. Restoring is much faster. Large texts are processed in the background so the
+window stays responsive, and outputs over about half a megabyte are shown without colouring
+the tokens.
 
 ## What gets masked, and what doesn't
 
@@ -247,6 +273,12 @@ are always recognised, so they are never mistaken for IPs or hosts. They are not
 default because timelines matter when debugging; turn on the **Date** category to hide
 them.
 
+**Source code.** Pasted code keeps its identifiers. A value is treated as code, not as data,
+when it is a call or an index (`get_user()`, `os.environ["DB_PASS"]`), an attribute of a
+common object (`self.schema`, `cfg.host`, `settings.API_TOKEN`, `process.env.X`), the key's own
+name (`connect(host=host, password=password)`) or a keyword such as `None`. Quoted literals are
+still masked: `password = "S3cret"` → `password = "PASSWORD_1"`. Whitespace is never changed.
+
 **Left alone** (the AI needs these to understand the log; they are not sensitive):
 
 - Java packages and classes: `org.jboss.as.controller`, `AbstractPool.java`
@@ -267,11 +299,18 @@ them.
 
 ## Custom terms
 
-Type words that MaskBoard cannot know are sensitive, such as a company, a customer or a project
-code, separated by commas: `acme, project-x, Contoso Ltd`. They are remembered between
-sessions.
+Words that MaskBoard cannot know are sensitive, such as a company, a customer, a product or a
+project code, go into the **Custom terms** list on the Ledger tab (desktop) or in the ledger
+panel (web), one per line. Long names and phrases with spaces or commas are fine:
+`Acme Holding Ltd.`, `project-x`, `Northwind, Inc.`. The list is remembered between sessions
+(in the browser only when *Remember in this browser* is on).
+
+The quickest way to add one: select it in the input, then press `Alt+M` or right-click →
+*Add to custom terms*. The input is masked again at once.
 
 - Terms apply as soon as you type them, also to auto-watch, the hotkeys and the tray menu.
+- Spaces inside a term match any run of spaces, tabs or line breaks, so `Acme Holding` also
+  finds `ACME  holding` and a name broken over two lines.
 - Matching ignores case and Turkish letters: `acme` finds `ACME` and `Acme`; `tuik` finds `TÜİK`,
   `Tüik` and `TUIK` (ı/i/İ/I, ü/u, ö/o, ç/c, ş/s, ğ/g count as the same letter). Each spelling gets
   its own token so the answer restores exactly as written (`ACME` → `CUSTOM_1`, `Acme` → `CUSTOM_2`).
@@ -306,6 +345,7 @@ version of each. The samples cover:
 - `.env`, `/etc/hosts`, `env` and `docker inspect`
 - an nginx config, `journalctl` output and a JBoss log
 - shell prompts and connection strings
+- Python and JavaScript source code (identifiers must stay, literals must be masked)
 
 `tests/rules.json` lists the values that must never leak and the values that must stay
 untouched.
@@ -331,7 +371,7 @@ Further checks cover:
 - key formats;
 - password words in several languages;
 - token boundaries;
-- national ID check digits and custom-term matching;
+- national ID check digits and custom-term matching, including multi-word terms;
 - URL and domain rules;
 - the log / AI answer classification.
 

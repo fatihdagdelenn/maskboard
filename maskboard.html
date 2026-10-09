@@ -96,9 +96,6 @@
     border:solid var(--ink);border-width:0 2px 2px 0;transform:rotate(45deg)}
   .tog:has(input:checked){color:var(--text);border-color:rgba(79,179,217,.4);background:rgba(79,179,217,.08)}
 
-  .custom-in{width:100%;margin-top:11px;background:var(--ink);color:var(--text);border:1px solid var(--line);
-    border-radius:7px;padding:9px 11px;font-family:var(--mono);font-size:12.5px;outline:none}
-  .custom-in:focus{border-color:var(--act)}
 
   .row{display:flex;gap:9px;flex-wrap:wrap;margin-top:14px}
   button{font-family:var(--sans);font-size:13.5px;font-weight:600;border-radius:8px;padding:10px 16px;
@@ -199,6 +196,32 @@
   .hdr-right{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
   .tag{white-space:nowrap}
   td.c-fake{word-break:normal;white-space:nowrap}
+  textarea,pre.render{tab-size:4;-moz-tab-size:4}
+  textarea.drop{border-color:var(--act);box-shadow:0 0 0 3px rgba(79,179,217,.25);background:#0f1822}
+  .file-chip{display:none;align-items:center;gap:8px;margin-top:8px;font-family:var(--mono);font-size:11.5px;
+    color:var(--text-dim)}
+  .file-chip.show{display:flex}
+  .file-chip button{padding:1px 7px;font-size:12px;line-height:1.4;background:transparent;border-color:var(--line-soft);
+    color:var(--text-faint)}
+  .out-label .acts{display:flex;align-items:center;gap:10px}
+  .mini{padding:4px 10px;font-size:11.5px}
+  .terms{padding:12px 14px;border-bottom:1px solid var(--line-soft)}
+  .terms-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;font-size:12px;
+    color:var(--text-dim)}
+  .terms-head b{color:var(--text);font-weight:600}
+  .terms-head span{font-family:var(--mono);font-size:11px;color:var(--text-faint)}
+  .terms textarea{min-height:92px;font-size:12.5px;line-height:1.5;padding:8px 10px}
+  .terms .hint{margin:8px 0 0;font-size:11.5px;line-height:1.5}
+  .ctx{position:fixed;z-index:60;min-width:230px;max-width:360px;padding:5px;background:var(--panel-2);
+    border:1px solid var(--line);border-radius:9px;box-shadow:0 12px 32px rgba(0,0,0,.5);display:none}
+  .ctx.show{display:block}
+  .ctx button{display:flex;align-items:center;justify-content:space-between;gap:18px;width:100%;padding:7px 10px;
+    border:0;border-radius:6px;background:transparent;font-size:13px;font-weight:500;text-align:left;color:var(--text)}
+  .ctx button:hover:not(:disabled){background:rgba(79,179,217,.12);color:#fff;transform:none}
+  .ctx button span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ctx kbd{flex:none}
+  .ctx hr{border:0;border-top:1px solid var(--line-soft);margin:4px 2px}
+  .ctx .note{padding:4px 10px 2px;font-size:11px;color:var(--text-faint)}
 </style>
 </head>
 <body>
@@ -237,6 +260,7 @@
         <div class="pbody">
           <p class="hint" data-i18n="out_hint"></p>
           <textarea id="src" spellcheck="false" data-i18n-ph="src_ph"></textarea>
+          <div class="file-chip" id="srcFile"><span></span><button type="button" data-i18n-title="file_detach">×</button></div>
 
           <div class="smart" id="smart">
             <span id="smartMsg"></span>
@@ -244,18 +268,19 @@
           </div>
 
           <div class="groups" id="groups"></div>
-          <input class="custom-in" id="customTerms" spellcheck="false" data-i18n-ph="custom_ph">
-
           <div class="row">
             <button class="primary" id="btnMask" data-i18n="btn_mask"></button>
             <button class="ghost" id="btnCopyMasked" disabled data-i18n="btn_copy_masked"></button>
+            <button class="ghost" id="btnOpenSrc" data-i18n="btn_open"></button>
             <button class="clear" id="btnClearIn" data-i18n="btn_clear"></button>
+            <input type="file" id="fileSrc" hidden>
           </div>
 
           <div class="out">
             <div class="out-label">
               <span class="l" data-i18n="masked_label"></span>
-              <span id="maskedCount" style="font-family:var(--mono);font-size:11px;color:var(--safe)"></span>
+              <span class="acts"><span id="maskedCount" style="font-family:var(--mono);font-size:11px;color:var(--safe)"></span>
+                <button class="ghost mini" id="btnSaveMasked" disabled data-i18n="btn_save"></button></span>
             </div>
             <pre class="render" id="masked" aria-live="polite" data-i18n-empty="empty_out"></pre>
           </div>
@@ -270,15 +295,19 @@
         <div class="pbody">
           <p class="hint" data-i18n="in_hint"></p>
           <textarea id="reply" spellcheck="false" data-i18n-ph="reply_ph"></textarea>
+          <div class="file-chip" id="replyFile"><span></span><button type="button" data-i18n-title="file_detach">×</button></div>
           <div class="row">
             <button class="primary" id="btnRestore" data-i18n="btn_restore"></button>
             <button class="ghost" id="btnCopyRestored" disabled data-i18n="btn_copy_result"></button>
+            <button class="ghost" id="btnOpenReply" data-i18n="btn_open"></button>
             <button class="clear" id="btnClearReply" data-i18n="btn_clear"></button>
+            <input type="file" id="fileReply" hidden>
           </div>
           <div class="out">
             <div class="out-label">
               <span class="l" data-i18n="restored_label"></span>
-              <span style="font-family:var(--mono);font-size:11px;color:var(--real)" data-i18n="real"></span>
+              <span class="acts"><span style="font-family:var(--mono);font-size:11px;color:var(--real)" data-i18n="real"></span>
+                <button class="ghost mini" id="btnSaveRestored" disabled data-i18n="btn_save"></button></span>
             </div>
             <pre class="render" id="restored" aria-live="polite" data-i18n-empty="empty_out"></pre>
           </div>
@@ -301,6 +330,11 @@
         <label class="persist" data-i18n-title="persist_title">
           <input type="checkbox" id="persist"> <span data-i18n="persist"></span> <small data-i18n="persist_note"></small>
         </label>
+        <div class="terms">
+          <div class="terms-head"><b data-i18n="terms_title"></b><span id="termCount"></span></div>
+          <textarea id="customTerms" spellcheck="false" data-i18n-ph="terms_ph"></textarea>
+          <p class="hint" data-i18n="terms_hint"></p>
+        </div>
         <div class="led-tools" style="padding-top:10px;padding-bottom:10px">
           <input class="led-search" id="ledSearch" spellcheck="false" data-i18n-ph="search_ph">
         </div>
@@ -319,6 +353,13 @@
 </div>
 
 <div class="toast" id="toast"></div>
+<div class="ctx" id="ctx" role="menu">
+  <button type="button" id="ctxAdd"><span></span><kbd>Alt+M</kbd></button>
+  <hr>
+  <button type="button" id="ctxCut"><span data-i18n="ctx_cut"></span><kbd>Ctrl+X</kbd></button>
+  <button type="button" id="ctxCopy"><span data-i18n="ctx_copy"></span><kbd>Ctrl+C</kbd></button>
+  <div class="note" data-i18n="ctx_note"></div>
+</div>
 
 <script>
 /* ENGINE START — JavaScript port of the maskboard.py engine; tests/test_web_engine.js keeps them in sync. */
@@ -632,8 +673,8 @@ const MaskBoardEngine = (function () {
     "rsa1024","rsa2048","rsa4096","nistp256","nistp384","nistp521","secp256r1","secp384r1","prime256v1",
     "aes128","aes192","aes256","chacha20","poly1305","overlay2","cgroup2","cgroupv2","netns0","el7",
     "el8","el9","fc38","fc39","fc40","win10","win11","dotnet6","dotnet8","node18","node20","node22"]);
-  const KW_RE = G(BL + "(?:hostname|nodename|node|computername|computer|dnsname|host|cn)" + BR +
-    "\\s*[:=]\\s*[\"']?([A-Za-z][A-Za-z0-9\\-]{1,62})[\"']?", "i");
+  const KW_RE = G(BL + "(?<k>hostname|nodename|node|computername|computer|dnsname|host|cn)" + BR +
+    "\\s*[:=]\\s*[\"']?(?<v>[A-Za-z][A-Za-z0-9\\-]{1,62})[\"']?", "i");
   const TOK_RE = G(BL + "[A-Za-z][A-Za-z0-9]*(?:-[A-Za-z0-9]+)*" + BR);
   const HOST_NOISE = words(`thread threads pool worker workers task tasks exec executor nio ajp main job batch
     session sess req request conn connection tx timer scheduler async default eventloop loop reactor line row
@@ -733,6 +774,47 @@ const MaskBoardEngine = (function () {
   const defaultOpts = () => Object.fromEntries(ALL_TYPES.map(t => [t, !DEFAULT_OFF.has(t)]));
   const OPT_OF = { project: "container" };
 
+  // ---- source code: an unquoted value that is a call, an index or an attribute is code, not data ----
+  const CODE_RECEIVERS = words(`self this cls os sys args opts options cfg conf config settings env environ process
+    request req ctx context params kwargs props obj conn window document module exports system`);
+  const CODE_WORDS = words("self this cls none true false null nil undefined");
+  const CODE_CHAIN_AT = /[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*/y;
+  const CODE_CALL_AT = /\((?:\)|[A-Za-z_"'*\[{])|\[(?:\]|[A-Za-z0-9_"'])/y;
+  /** end of the call or index opened at text[i], or -1 when it does not close on this line */
+  function callEnd(text, i) {
+    let depth = 0, q = null;
+    for (; i < text.length; i++) {
+      const ch = text[i];
+      if (ch === "\n") return -1;
+      if (q) {
+        if (ch === "\\") i++;
+        else if (ch === q) q = null;
+      } else if (ch === "\"" || ch === "'") q = ch;
+      else if ("([{".includes(ch)) depth++;
+      else if (")]}".includes(ch) && --depth === 0) return i + 1;
+    }
+    return -1;
+  }
+  /** true for get_user(), os.environ["X"], cfg.host, self.schema or host=host: code, not a value */
+  function codeValue(text, s, v, key) {
+    if (s > 0 && "\"'`".includes(text[s - 1])) return false;
+    CODE_CHAIN_AT.lastIndex = s;
+    const m = CODE_CHAIN_AT.exec(text);
+    if (!m) return false;
+    const chain = m[0], e = s + chain.length;
+    if (e < s + v.length && !"([".includes(text[e])) return false;
+    const low = chain.toLowerCase();
+    if (CODE_WORDS.has(low) || (key && low === key.toLowerCase())) return true;
+    CODE_CALL_AT.lastIndex = e;
+    if (CODE_CALL_AT.test(text)) {
+      const end = callEnd(text, e);
+      if (end >= 0 && !/[A-Za-z0-9_]/.test(text[end] || "")) return true;
+    }
+    if (chain.includes(".") && !(validDomain(chain) || benignDomain(chain)))
+      return CODE_RECEIVERS.has(chain.split(".")[0].toLowerCase());
+    return false;
+  }
+
   function userOk(v) {
     if (!v || [...v].length < 2 || isDigits(v) || isToken(v)) return false;
     const low = v.toLowerCase();
@@ -769,12 +851,21 @@ const MaskBoardEngine = (function () {
   }
   const isAlnum = ch => /[\p{L}\p{N}]/u.test(ch), isAlpha = ch => /\p{L}/u.test(ch);
   // Custom terms ignore case and Turkish letters: "tuik" also finds "TÜİK", "Tüik" and "TUIK".
+  // A space in a term matches any run of spaces, tabs or line breaks ("Acme  Corp", "Acme\nCorp").
   const TR_FOLD = {};
   for (const g of ["iıİI", "uüUÜ", "oöOÖ", "cçCÇ", "sşSŞ", "gğGĞ"]) for (const ch of g) TR_FOLD[ch] = g;
+  const TERM_SPACE = "[ \\t\\r\\n\\u00a0]+";
+  const normTerm = t => (t || "").replace(new RegExp(TERM_SPACE, "gu"), " ").replace(/^ +| +$/g, "");
+  function normTerms(terms) {
+    const out = [];
+    for (const t of (terms || []).map(normTerm)) if (t && !out.includes(t)) out.push(t);
+    return out;
+  }
   function termRe(term) {
     let src = "";
     for (const ch of term) {
-      if (TR_FOLD[ch]) src += "[" + TR_FOLD[ch] + "]";
+      if (ch === " ") src += TERM_SPACE;
+      else if (TR_FOLD[ch]) src += "[" + TR_FOLD[ch] + "]";
       else if (isAlpha(ch)) {
         const v = new Set([ch]);
         for (const x of [ch.toLowerCase(), ch.toUpperCase()]) if ([...x].length === 1) v.add(x);
@@ -885,6 +976,7 @@ const MaskBoardEngine = (function () {
           let v = m.groups[g];
           if (g === "v2") v = v.replace(/[.:]+$/u, "");
           if ((key === "PWD" || key === "OLDPWD") && v.startsWith("/")) continue;
+          if (g === "v2" && codeValue(text, gs(m, g), v, key)) continue;
           if (secretOk(v, p)) addSecret(gs(m, g), v, p);
         }
         for (const m of all(SECRET_CLI_RE, text)) {
@@ -958,7 +1050,9 @@ const MaskBoardEngine = (function () {
       for (const m of all(HOME_RE, text)) addUser(gs(m, "u"), m.groups.u);
       for (const m of all(USER_KV_RE, text)) {
         const g = m.groups.v1 !== undefined ? "v1" : "v2";
-        addUser(gs(m, g), m.groups[g].replace(/[.:]+$/u, ""));
+        const v = m.groups[g].replace(/[.:]+$/u, "");
+        if (g === "v2" && codeValue(text, gs(m, g), v, m.groups.key)) continue;
+        addUser(gs(m, g), v);
       }
       for (const m of all(USER_ID_RE, text))
         for (const u of all(USER_ID_ONE, m[0])) addUser(m.index + gs(u, "u"), u.groups.u);
@@ -1074,7 +1168,8 @@ const MaskBoardEngine = (function () {
       if (on("hostname")) {
         const seen = new Set();
         for (const m of all(KW_RE, text)) {
-          const name = m[1], s = m.index + m[0].lastIndexOf(name);
+          const name = m.groups.v, s = gs(m, "v");
+          if (codeValue(text, s, name, m.groups.k)) continue;
           if (!seen.has(s + ":" + (s + name.length)) && hostLabelOk(name)) {
             seen.add(s + ":" + (s + name.length));
             add(s, s + name.length, name, "hostname", null, null, !/\d/.test(name));
@@ -1088,18 +1183,20 @@ const MaskBoardEngine = (function () {
           if (/^"\s*:/u.test(text.slice(e, e + 3))) continue;
           if (/^[0-9a-fA-F]{1,4}$/.test(t) && text.slice(e, e + 1) === ":") continue;
           if (ends.has(s - 1) && "-_".includes(text[s - 1])) continue;
-          if (looksLikeHost(t)) add(s, e, t, "hostname");
+          if (looksLikeHost(t) && !codeValue(text, s, t)) add(s, e, t, "hostname");
         }
       }
       if (on("config")) {
         const values = new Map(connDbs);
         for (const rx of [CFG_FREE_RE, CFG_STRICT_RE]) for (const m of all(rx, text)) {
           const val = (m[2] || "").replace(/[:.]+$/u, "");
+          if (codeValue(text, m.indices[2][0], val, m[1])) continue;
           if ([...val].length >= 2 && !CFG_STOP.has(val.toLowerCase()) && !isToken(val) && !values.has(val))
             values.set(val, cfgPrefix(m[1]));
         }
         for (const m of all(CFG_ENV_RE, text)) {
           const val = m.groups.v.replace(/[:.]+$/u, "");
+          if (codeValue(text, gs(m, "v"), val, m.groups.key)) continue;
           if ([...val].length >= 2 && !CFG_STOP.has(val.toLowerCase()) && !isToken(val) && !values.has(val))
             values.set(val, cfgPrefix(m.groups.key));
         }
@@ -1186,7 +1283,7 @@ const MaskBoardEngine = (function () {
       this.save();
       return added;
     }
-    setCustom(terms) { this.customTerms = terms; this.save(); }
+    setCustom(terms) { this.customTerms = normTerms(terms); this.save(); }
     save() {
       if (!this.storage) return;
       try {
@@ -1198,7 +1295,7 @@ const MaskBoardEngine = (function () {
       let d = null;
       try { d = this.storage.load(); } catch (e) { d = null; }
       if (!d) return;
-      this.customTerms = d.custom_terms || [];
+      this.customTerms = normTerms(d.custom_terms);
       for (const [k, v] of Object.entries(d.counters || {})) this.counters.set(k, +v);
       for (const e of d.entries || []) {
         if (e.secret || !e.real || !e.fake) continue;
@@ -1215,10 +1312,11 @@ const MaskBoardEngine = (function () {
     clear() { this._reset(); this.save(); }
   }
 
-  return { Mapper, TOKEN_RE, ALL_TYPES, DEFAULT_OFF, defaultOpts, isToken,
+  return { Mapper, TOKEN_RE, ALL_TYPES, DEFAULT_OFF, defaultOpts, isToken, normTerm, normTerms,
            setMaskSystemUsers: v => { MASK_SYSTEM_USERS = !!v; } };
 })();
 /* ENGINE END */
+
 </script>
 <script>
 "use strict";
@@ -1244,14 +1342,23 @@ const MaskBoardEngine = (function () {
       note_mem: "Ledger lives in this tab only — export it to restore later",
       note_saved: "Ledger is saved in this browser (secrets excluded)",
       out_title: "Outgoing — text for the AI", real_data: "REAL DATA",
-      out_hint: "Paste a log, config, <code>ip a</code>, <code>docker ps</code> or <code>.env</code> output. <kbd>Ctrl</kbd>+<kbd>Enter</kbd> masks it.",
+      out_hint: "Paste a log, config, <code>ip a</code>, <code>docker ps</code> or <code>.env</code> output — or drop a .txt / .log / .csv file here. <kbd>Ctrl</kbd>+<kbd>Enter</kbd> masks it; select a word and press <kbd>Alt</kbd>+<kbd>M</kbd> to add it to the custom terms.",
       src_ph: "e.g.\nadmin@web01:~/projects/shop$ docker ps\nweb01  10.10.10.20   dns: app.example-corp.com\nDB_URL=postgres://appuser:S3cret.1@db01:5432/appdb\neth0: inet 185.12.34.56/24",
-      move_to_reply: "Move to Restore", custom_ph: "Custom terms, comma separated (ACME, project-x, client name) — also matched inside ACME_Prod, AcmeUser",
+      move_to_reply: "Move to Restore",
+      terms_title: "Custom terms", terms_count: "{n} terms", terms_count_1: "1 term", terms_ph: "One per line, e.g.\nAcme Holding\nproject-x\nCustomer Name Ltd.",
+      terms_hint: "Company, product or project names — long phrases too. Matched as whole words and identifier parts (<code>ACME_Prod</code>, <code>AcmeUser</code>); case, Turkish letters and extra spaces are ignored. Select text in the input and press <kbd>Alt</kbd>+<kbd>M</kbd> or right-click to add it.",
+      ctx_add: "Add “{s}” to custom terms", ctx_cut: "Cut", ctx_copy: "Copy", ctx_note: "Shift + right-click opens the browser menu",
+      t_term_need: "Select a word or phrase first.", t_term_token: "That is already a token.",
+      t_term_added: "Added to custom terms: {s}", t_term_exists: "Already a custom term: {s}",
+      btn_open: "Open file", btn_save: "Download", file_detach: "Forget the file (keep the text)",
+      file_chip: "File: {name} · {size}{enc}", t_file_bad: "{name} does not look like a text file.",
+      t_file_saved: "{name} downloaded.", t_file_saved_real: "{name} downloaded — it contains real values.",
+      t_busy: "Working on {size}…",
       btn_mask: "Mask", btn_copy_masked: "Copy masked text", btn_clear: "Clear",
       masked_label: "Masked output — send this to the AI", safe: "SAFE", masked_n: "{n} VALUES MASKED",
       empty_out: "The result appears here.",
       in_title: "Incoming — restore the AI's answer", tokenized: "TOKENIZED",
-      in_hint: "Paste the AI's answer. Tokens such as <code>IP_PRIV_1</code>, <code>HOST_2</code>, <code>USER_1</code> turn back into real values. <kbd>Ctrl</kbd>+<kbd>Enter</kbd> restores.",
+      in_hint: "Paste the AI's answer or drop a masked file. Tokens such as <code>IP_PRIV_1</code>, <code>HOST_2</code>, <code>USER_1</code> turn back into real values. <kbd>Ctrl</kbd>+<kbd>Enter</kbd> restores.",
       reply_ph: "Paste the AI's answer here — e.g. 'On HOST_1, connect to IP_PRIV_1 as USER_1 and restart CONTAINER_2…'",
       btn_restore: "Restore", btn_copy_result: "Copy result", restored_label: "Restored answer", real: "REAL",
       ledger: "Mapping ledger", export: "Export (.json)", import: "Import", reset: "Reset",
@@ -1289,14 +1396,23 @@ const MaskBoardEngine = (function () {
       note_mem: "Defter yalnızca bu sekmede — geri çevirmek için dışa aktar",
       note_saved: "Defter bu tarayıcıda saklanıyor (parolalar hariç)",
       out_title: "Giden — AI'a gidecek metin", real_data: "GERÇEK VERİ",
-      out_hint: "Log, config, <code>ip a</code>, <code>docker ps</code>, <code>.env</code> çıktısı — hassas metni buraya yapıştır. <kbd>Ctrl</kbd>+<kbd>Enter</kbd> ile anonimleştir.",
+      out_hint: "Log, config, <code>ip a</code>, <code>docker ps</code>, <code>.env</code> çıktısını yapıştır ya da .txt / .log / .csv dosyasını buraya bırak. <kbd>Ctrl</kbd>+<kbd>Enter</kbd> ile anonimleştir; bir kelimeyi seçip <kbd>Alt</kbd>+<kbd>M</kbd> ile özel terimlere ekle.",
       src_ph: "Örn:\nadmin@web01:~/projeler/stok$ docker ps\nweb01  10.10.10.20   dns: app.example-corp.com\nDB_URL=postgres://appuser:Gizli.123@db01:5432/appdb\neth0: inet 185.12.34.56/24",
-      move_to_reply: "Geri çevir alanına taşı", custom_ph: "Özel terimler, virgülle (ACME, proje-x, müşteri adı) — ACME_Prod, AcmeUser içinde de yakalanır",
+      move_to_reply: "Geri çevir alanına taşı",
+      terms_title: "Özel terimler", terms_count: "{n} terim", terms_count_1: "1 terim", terms_ph: "Her satıra bir terim, örn.\nAcme Holding\nproje-x\nMüşteri Adı A.Ş.",
+      terms_hint: "Firma, ürün ya da proje adları — uzun ifadeler de olur. Tam kelime ve tanımlayıcı parçası olarak bulunur (<code>ACME_Prod</code>, <code>AcmeUser</code>); büyük/küçük harf, Türkçe harfler ve fazla boşluklar önemsizdir. Girişte metni seçip <kbd>Alt</kbd>+<kbd>M</kbd>'ye bas ya da sağ tıklayıp ekle.",
+      ctx_add: "“{s}” özel terimlere ekle", ctx_cut: "Kes", ctx_copy: "Kopyala", ctx_note: "Shift + sağ tık tarayıcı menüsünü açar",
+      t_term_need: "Önce bir kelime ya da ifade seç.", t_term_token: "Bu zaten bir etiket.",
+      t_term_added: "Özel terimlere eklendi: {s}", t_term_exists: "Zaten özel terimlerde: {s}",
+      btn_open: "Dosya aç", btn_save: "İndir", file_detach: "Dosyayı bırak (metin kalsın)",
+      file_chip: "Dosya: {name} · {size}{enc}", t_file_bad: "{name} bir metin dosyası gibi görünmüyor.",
+      t_file_saved: "{name} indirildi.", t_file_saved_real: "{name} indirildi — gerçek değerler içerir.",
+      t_busy: "{size} işleniyor…",
       btn_mask: "Anonimleştir", btn_copy_masked: "Maskeli metni kopyala", btn_clear: "Temizle",
       masked_label: "Maskeli çıktı — bunu AI'a gönder", safe: "GÜVENLİ", masked_n: "{n} DEĞER MASKELENDİ",
       empty_out: "Sonuç burada görünecek.",
       in_title: "Gelen — AI'ın cevabını geri çevir", tokenized: "ETİKETLİ VERİ",
-      in_hint: "AI'ın cevabını buraya yapıştır. <code>IP_PRIV_1</code>, <code>HOST_2</code>, <code>USER_1</code> gibi etiketler gerçek değerlerine döner. <kbd>Ctrl</kbd>+<kbd>Enter</kbd> ile geri çevir.",
+      in_hint: "AI'ın cevabını yapıştır ya da maskeli bir dosyayı bırak. <code>IP_PRIV_1</code>, <code>HOST_2</code>, <code>USER_1</code> gibi etiketler gerçek değerlerine döner. <kbd>Ctrl</kbd>+<kbd>Enter</kbd> ile geri çevir.",
       reply_ph: "AI'ın cevabını buraya yapıştır — örn. 'HOST_1 üzerinde IP_PRIV_1 adresine USER_1 ile bağlanıp CONTAINER_2 konteynerini yeniden başlat...'",
       btn_restore: "Geri çevir", btn_copy_result: "Sonucu kopyala", restored_label: "Geri çevrilmiş cevap", real: "GERÇEK",
       ledger: "Eşleştirme defteri", export: "Dışa aktar (.json)", import: "İçe aktar", reset: "Sıfırla",
@@ -1356,7 +1472,7 @@ const MaskBoardEngine = (function () {
   const persistOn = lsGet(PREF) === "1";
   const m = new E.Mapper(persistOn ? storage : null);
   $("persist").checked = persistOn;
-  if (m.customTerms && m.customTerms.length) $("customTerms").value = m.customTerms.join(", ");
+  if (m.customTerms && m.customTerms.length) $("customTerms").value = m.customTerms.join("\n");
 
   // ---------- type chips ----------
   const GROUPS = [["grp_net", ["ipv4", "ipv6", "domain", "url", "hostname", "mac", "iface"]],
@@ -1369,7 +1485,11 @@ const MaskBoardEngine = (function () {
                 `<input type="checkbox" data-t="${x}"${E.DEFAULT_OFF.has(x) ? "" : " checked"}> <span data-type="${x}"></span></label>`).join("") +
     `</div></div>`).join("");
   const readOpts = () => { const o = {}; document.querySelectorAll("#groups input").forEach(c => o[c.dataset.t] = c.checked); return o; };
-  const customList = () => $("customTerms").value.split(",").map(s => s.trim()).filter(Boolean);
+  const customList = () => E.normTerms($("customTerms").value.split("\n"));
+  const showTermCount = () => {
+    const n = m.customTerms.length;
+    $("termCount").textContent = t(n === 1 ? "terms_count_1" : "terms_count", { n });
+  };
 
   function applyLang() {
     document.documentElement.lang = lang;
@@ -1379,13 +1499,15 @@ const MaskBoardEngine = (function () {
     document.querySelectorAll("[data-i18n-empty]").forEach(el => { el.dataset.empty = t(el.dataset.i18nEmpty); });
     document.querySelectorAll("[data-type]").forEach(el => { el.textContent = typeLabel(el.dataset.type); });
     document.querySelectorAll(".langsw button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.lang === lang)));
-    setMaskedCount(lastCount); renderLedger(); updateStatus(); checkSmart();
+    setMaskedCount(lastCount); renderLedger(); updateStatus(); checkSmart(); showTermCount(); showFileChips();
   }
   document.querySelectorAll(".langsw button").forEach(b => b.onclick = () => {
     lang = b.dataset.lang; lsSet(LANG_KEY, lang); applyLang();
   });
 
+  const HIGHLIGHT_MAX = 2000000, BUSY_MIN = 400000;
   function highlightTokens(text) {
+    if (text.length > HIGHLIGHT_MAX) return esc(text);
     const idx = new Map(m.entries.map(e => [e.fake, e]));
     let html = "", i = 0;
     for (const tk of text.matchAll(E.TOKEN_RE)) {
@@ -1402,41 +1524,177 @@ const MaskBoardEngine = (function () {
   // ---------- mask ----------
   let lastCount = null;
   const setMaskedCount = n => { lastCount = n; $("maskedCount").textContent = n ? t("masked_n", { n }) : t("safe"); };
-  function anonymize() {
-    const text = $("src").value;
+  function anonymize(note) {
+    const text = fileText("src");
     if (!text.trim()) { toast(t("t_need_src")); return; }
-    m.setCustom(customList());
-    const before = m.entries.length;
-    const [out, n] = m.anonymize(text, readOpts());
-    const el = $("masked");
-    el.innerHTML = highlightTokens(out); el.dataset.plain = out;
-    bump(el);
-    $("btnCopyMasked").disabled = !out.length;
-    setMaskedCount(n); hideSmart(); renderLedger(); updateStatus();
-    const added = m.entries.length - before;
-    toast(n ? t("t_masked", { n }) + (added ? t("t_new", { a: added }) : "") : t("t_nothing"));
+    m.setCustom(customList()); showTermCount();
+    later(text.length, () => {
+      const before = m.entries.length;
+      const [out, n] = m.anonymize(text, readOpts());
+      const el = $("masked");
+      el.innerHTML = highlightTokens(out); el.dataset.plain = out;
+      bump(el);
+      $("btnCopyMasked").disabled = $("btnSaveMasked").disabled = !out.length;
+      setMaskedCount(n); hideSmart(); renderLedger(); updateStatus();
+      const added = m.entries.length - before;
+      toast((note || "") + (n ? t("t_masked", { n }) + (added ? t("t_new", { a: added }) : "") : t("t_nothing")));
+    });
   }
+  /** large texts: show a busy note first so the page paints before the work blocks it */
+  function later(size, fn) {
+    if (size < BUSY_MIN) return fn();
+    toast(t("t_busy", { size: humanSize(size) })); document.body.style.cursor = "progress";
+    setTimeout(() => { try { fn(); } finally { document.body.style.cursor = ""; } }, 40);
+  }
+  const humanSize = n => n >= 1e6 ? (n / 1e6).toFixed(1) + " MB" : Math.max(1, Math.round(n / 1e3)) + " KB";
+
+  // ---------- text files: open or drop, keep line endings, download the result ----------
+  const files = { src: null, reply: null };        // {name, text, norm, bom, enc}
+  const fileText = id => {
+    const f = files[id], v = $(id).value;
+    if (f && f.norm === v) return f.text;
+    if (f) { files[id] = null; showFileChips(); }
+    return v;
+  };
+  function showFileChips() {
+    for (const id of ["src", "reply"]) {
+      const f = files[id], chip = $(id + "File");
+      chip.classList.toggle("show", !!f);
+      if (f) chip.firstElementChild.textContent = t("file_chip", { name: f.name, size: humanSize(f.size),
+        enc: f.enc === "utf-8" ? "" : " · " + f.enc });
+    }
+  }
+  function loadFile(id, file) {
+    const r = new FileReader();
+    r.onload = () => {
+      const bytes = new Uint8Array(r.result);
+      const bom = bytes[0] === 0xEF && bytes[1] === 0xBB && bytes[2] === 0xBF;
+      if (bytes.subarray(0, 8192).includes(0)) { toast(t("t_file_bad", { name: file.name })); return; }
+      let text, enc = "utf-8";
+      try { text = new TextDecoder("utf-8", { fatal: true }).decode(bytes); }
+      catch (_) { text = new TextDecoder("windows-1254").decode(bytes); enc = "windows-1254"; }
+      const norm = text.replace(/\r\n?/g, "\n");
+      $(id).value = norm;
+      files[id] = { name: file.name, text, norm: $(id).value, bom, enc, size: file.size };
+      showFileChips();
+      if (id === "src") anonymize(); else restore();
+    };
+    r.readAsArrayBuffer(file);
+  }
+  function derivedName(name, tag) {
+    const dot = name.lastIndexOf(".");
+    let stem = dot > 0 ? name.slice(0, dot) : name, ext = dot > 0 ? name.slice(dot) : ".txt";
+    stem = stem.replace(/\.(masked|restored)$/, "");
+    return stem + "." + tag + ext;
+  }
+  function download(outId, srcId, tag) {
+    const text = $(outId).dataset.plain || "";
+    if (!text) { toast(t("t_nothing_copy")); return; }
+    const f = files[srcId];
+    const name = f ? derivedName(f.name, tag) : tag + "-" + new Date().toISOString().slice(0, 10) + ".txt";
+    const blob = new Blob([(f && f.bom ? "\ufeff" : "") + text], { type: "text/plain;charset=utf-8" });
+    const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name; a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    toast(t(tag === "restored" ? "t_file_saved_real" : "t_file_saved", { name }));
+  }
+  for (const id of ["src", "reply"]) {
+    const ta = $(id), input = $(id === "src" ? "fileSrc" : "fileReply");
+    $(id === "src" ? "btnOpenSrc" : "btnOpenReply").onclick = () => input.click();
+    input.onchange = e => { if (e.target.files[0]) loadFile(id, e.target.files[0]); e.target.value = ""; };
+    $(id + "File").querySelector("button").onclick = () => { files[id] = null; showFileChips(); };
+    ta.addEventListener("dragover", e => { if (e.dataTransfer.types.includes("Files")) { e.preventDefault(); ta.classList.add("drop"); } });
+    ta.addEventListener("dragleave", () => ta.classList.remove("drop"));
+    ta.addEventListener("drop", e => {
+      ta.classList.remove("drop");
+      if (!e.dataTransfer.files.length) return;
+      e.preventDefault(); loadFile(id, e.dataTransfer.files[0]);
+    });
+  }
+  $("btnSaveMasked").onclick = () => download("masked", "src", "masked");
+  $("btnSaveRestored").onclick = () => download("restored", "reply", "restored");
+
+  // ---------- add the selected text to the custom terms (right-click menu or Alt+M) ----------
+  function selectedIn(el) {
+    if (el.tagName === "TEXTAREA") return el.value.slice(el.selectionStart, el.selectionEnd);
+    const sel = window.getSelection();
+    return sel && sel.rangeCount && el.contains(sel.anchorNode) ? sel.toString() : "";
+  }
+  function addTerm(raw) {
+    const term = E.normTerm(raw);
+    if (!term) { toast(t("t_term_need")); return; }
+    if (E.isToken(term)) { toast(t("t_term_token")); return; }
+    m.setCustom(customList());
+    let note;
+    if (m.customTerms.some(x => x.toLowerCase() === term.toLowerCase())) note = t("t_term_exists", { s: term });
+    else {
+      const ta = $("customTerms"), cur = ta.value;
+      ta.value = cur + (cur && !cur.endsWith("\n") ? "\n" : "") + term;
+      m.setCustom(customList()); showTermCount();
+      note = t("t_term_added", { s: term });
+    }
+    if ($("src").value.trim()) anonymize(note + " · "); else toast(note);
+  }
+  const ctx = $("ctx");
+  let ctxSel = "", ctxEl = null;
+  const hideCtx = () => ctx.classList.remove("show");
+  for (const id of ["src", "masked"]) {
+    $(id).addEventListener("contextmenu", e => {
+      const sel = selectedIn($(id));
+      if (e.shiftKey || !sel.trim()) return;
+      e.preventDefault();
+      ctxSel = sel; ctxEl = $(id);
+      const short = E.normTerm(sel);
+      ctx.querySelector("#ctxAdd span").textContent = t("ctx_add", { s: short.length > 40 ? short.slice(0, 38) + "…" : short });
+      $("ctxCut").style.display = id === "src" ? "" : "none";
+      ctx.classList.add("show");
+      const w = ctx.offsetWidth, h = ctx.offsetHeight;
+      ctx.style.left = Math.min(e.clientX, innerWidth - w - 8) + "px";
+      ctx.style.top = Math.min(e.clientY, innerHeight - h - 8) + "px";
+    });
+  }
+  $("ctxAdd").onclick = () => { hideCtx(); addTerm(ctxSel); };
+  $("ctxCopy").onclick = () => { hideCtx(); copyText(ctxSel); };
+  $("ctxCut").onclick = () => {
+    hideCtx(); copyText(ctxSel);
+    const ta = $("src"); ta.focus(); ta.setRangeText("", ta.selectionStart, ta.selectionEnd, "start");
+    ta.dispatchEvent(new Event("input"));
+  };
+  document.addEventListener("mousedown", e => { if (!ctx.contains(e.target)) hideCtx(); });
+  document.addEventListener("scroll", hideCtx, true);
+  document.addEventListener("keydown", e => {
+    if (e.key === "Escape") hideCtx();
+    if (e.altKey && !e.ctrlKey && !e.metaKey && e.code === "KeyM") {
+      const el = [$("src"), $("masked")].find(x => x === document.activeElement || selectedIn(x));
+      if (!el) return;
+      e.preventDefault(); addTerm(selectedIn(el));
+    }
+  });
 
   // ---------- restore ----------
   function restore() {
-    const text = $("reply").value;
+    const text = fileText("reply");
     if (!text.trim()) { toast(t("t_need_reply")); return; }
     if (!m.entries.length) toast(t("t_empty_ledger"));
-    const [plain, n] = m.restore(text);
-    const [marked] = m.restore(text, r => "\u0000" + r + "\u0001");
-    const el = $("restored");
-    el.innerHTML = esc(marked).replace(/\u0000([\s\S]*?)\u0001/g, '<mark class="r">$1</mark>');
-    el.dataset.plain = plain;
-    bump(el);
-    $("btnCopyRestored").disabled = !plain.length;
-    if (m.entries.length) toast(n ? t("t_restored", { n }) : t("t_no_known"));
+    later(text.length, () => {
+      const [plain, n] = m.restore(text);
+      const el = $("restored");
+      if (plain.length > HIGHLIGHT_MAX) el.textContent = plain;
+      else {
+        const [marked] = m.restore(text, r => "\u0000" + r + "\u0001");
+        el.innerHTML = esc(marked).replace(/\u0000([\s\S]*?)\u0001/g, '<mark class="r">$1</mark>');
+      }
+      el.dataset.plain = plain;
+      bump(el);
+      $("btnCopyRestored").disabled = $("btnSaveRestored").disabled = !plain.length;
+      if (m.entries.length) toast(n ? t("t_restored", { n }) : t("t_no_known"));
+    });
   }
 
   // ---------- smart direction: warn when the left box holds an AI answer ----------
   let smartTimer;
   function checkSmart() {
     const text = $("src").value;
-    if (!text.trim() || !m.entries.length) { hideSmart(); return; }
+    if (!text.trim() || !m.entries.length || text.length > BUSY_MIN) { hideSmart(); return; }
     const [kind, known] = m.classify(text, readOpts());
     if (kind !== "restore") { hideSmart(); return; }
     $("smartMsg").textContent = t("smart", { n: known });
@@ -1444,7 +1702,7 @@ const MaskBoardEngine = (function () {
   }
   const hideSmart = () => $("smart").classList.remove("show");
   $("src").addEventListener("input", () => { clearTimeout(smartTimer); smartTimer = setTimeout(checkSmart, 250); });
-  $("customTerms").addEventListener("input", () => { m.setCustom(customList()); clearTimeout(smartTimer); smartTimer = setTimeout(checkSmart, 250); });
+  $("customTerms").addEventListener("input", () => { m.setCustom(customList()); showTermCount(); clearTimeout(smartTimer); smartTimer = setTimeout(checkSmart, 250); });
   $("btnMoveToReply").onclick = () => {
     $("reply").value = $("src").value; $("src").value = ""; hideSmart(); restore();
     $("reply").scrollIntoView({ behavior: "smooth", block: "center" });
@@ -1485,7 +1743,10 @@ const MaskBoardEngine = (function () {
   function copyFrom(id, whatKey) {
     const text = $(id).dataset.plain || "";
     if (!text) { toast(t("t_nothing_copy")); return; }
-    const done = () => toast(t("t_copied", { what: t(whatKey) }));
+    copyText(text, () => toast(t("t_copied", { what: t(whatKey) })));
+  }
+  function copyText(text, done) {
+    done = done || (() => {});
     const fallback = () => {
       const ta = document.createElement("textarea"); ta.value = text; document.body.appendChild(ta);
       ta.select(); document.execCommand("copy"); ta.remove(); done();
@@ -1512,8 +1773,9 @@ const MaskBoardEngine = (function () {
         const d = JSON.parse(r.result);
         if (!Array.isArray(d.entries)) throw 0;
         const added = m.importEntries(d.entries);
-        if (Array.isArray(d.custom_terms) && d.custom_terms.length && !$("customTerms").value.trim())
-          $("customTerms").value = d.custom_terms.join(", ");
+        if (Array.isArray(d.custom_terms) && d.custom_terms.length && !$("customTerms").value.trim()) {
+          $("customTerms").value = E.normTerms(d.custom_terms).join("\n"); m.setCustom(customList()); showTermCount();
+        }
         renderLedger(); updateStatus(); checkSmart();
         toast(added ? t("t_imported", { n: added }) : t("t_import_none"));
       } catch (_) { toast(t("t_import_bad")); }
@@ -1524,7 +1786,7 @@ const MaskBoardEngine = (function () {
     if (m.entries.length && !confirm(t("confirm_reset"))) return;
     m.clear();
     for (const id of ["masked", "restored"]) { $(id).innerHTML = ""; $(id).dataset.plain = ""; }
-    $("btnCopyMasked").disabled = $("btnCopyRestored").disabled = true;
+    $("btnCopyMasked").disabled = $("btnCopyRestored").disabled = $("btnSaveMasked").disabled = $("btnSaveRestored").disabled = true;
     setMaskedCount(null); hideSmart(); renderLedger(); updateStatus(); toast(t("t_reset"));
   }
   $("persist").onchange = e => {
@@ -1544,24 +1806,24 @@ const MaskBoardEngine = (function () {
   }
 
   const bump = el => { el.classList.remove("bump"); void el.offsetWidth; el.classList.add("bump"); };
-  $("btnMask").onclick = anonymize;
+  $("btnMask").onclick = () => anonymize();
   $("btnRestore").onclick = restore;
   $("btnCopyMasked").onclick = () => copyFrom("masked", "w_masked");
   $("btnCopyRestored").onclick = () => copyFrom("restored", "w_result");
   $("btnClearIn").onclick = () => {
-    $("src").value = ""; $("masked").innerHTML = ""; $("masked").dataset.plain = "";
-    $("btnCopyMasked").disabled = true; setMaskedCount(null); hideSmart(); updateStatus(); toast(t("t_cleared_in"));
+    $("src").value = ""; $("masked").innerHTML = ""; $("masked").dataset.plain = ""; files.src = null; showFileChips();
+    $("btnCopyMasked").disabled = $("btnSaveMasked").disabled = true; setMaskedCount(null); hideSmart(); updateStatus(); toast(t("t_cleared_in"));
   };
   $("btnClearReply").onclick = () => {
-    $("reply").value = ""; $("restored").innerHTML = ""; $("restored").dataset.plain = "";
-    $("btnCopyRestored").disabled = true; toast(t("t_cleared_reply"));
+    $("reply").value = ""; $("restored").innerHTML = ""; $("restored").dataset.plain = ""; files.reply = null; showFileChips();
+    $("btnCopyRestored").disabled = $("btnSaveRestored").disabled = true; toast(t("t_cleared_reply"));
   };
   $("btnExport").onclick = exportMap;
   $("btnReset").onclick = resetAll;
   $("btnImport").onclick = () => $("fileImport").click();
   $("fileImport").onchange = e => { if (e.target.files[0]) importMap(e.target.files[0]); e.target.value = ""; };
   const ctrlEnter = fn => e => { if ((e.ctrlKey || e.metaKey) && e.key === "Enter") { e.preventDefault(); fn(); } };
-  $("src").addEventListener("keydown", ctrlEnter(anonymize));
+  $("src").addEventListener("keydown", ctrlEnter(() => anonymize()));
   $("reply").addEventListener("keydown", ctrlEnter(restore));
 
   applyLang();

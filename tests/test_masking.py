@@ -241,6 +241,14 @@ def check_custom_terms(engine):
     out, _ = m.anonymize(txt)
     if out != want: problems.append("Turkish letters:\n  got  %s\n  want %s" % (out, want))
     if m.restore(out)[0] != txt: problems.append("Turkish custom terms did not restore")
+    m = engine.Mapper(store=None)
+    m.set_custom(["  Acme   Corp ", "Acme Corp", "Big Data, Inc."])
+    if m.custom_terms != ["Acme Corp", "Big Data, Inc."]: problems.append("terms not normalised: %r" % m.custom_terms)
+    txt = "ACME corp, Acme\n  Corp\tLtd, big data, inc. report, Acme Corporation"
+    want = "CUSTOM_1, CUSTOM_2\tLtd, CUSTOM_3 report, Acme Corporation"
+    out, _ = m.anonymize(txt)
+    if out != want: problems.append("multi-word terms:\n  got  %r\n  want %r" % (out, want))
+    if m.restore(out)[0] != txt: problems.append("multi-word terms did not restore")
     return problems
 
 
