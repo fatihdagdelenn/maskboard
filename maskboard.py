@@ -44,7 +44,7 @@ def _import_pystray():
 pystray = _import_pystray()
 
 APP_NAME = "MaskBoard"
-APP_VERSION = "1.1.0"
+APP_VERSION = "1.2.0"
 HOME = os.path.expanduser("~")
 STORE = os.path.join(HOME, ".maskboard.json")
 LEGACY_STORES = [os.path.join(HOME, n) for n in (".clipveil.json", ".anonim_ajan.json")]   # earlier names
@@ -1050,6 +1050,65 @@ class Mapper:
 
 
 # =====================================================================
+#  SYNTAX COLOURS for the text boxes (display only; never changes the text)
+# =====================================================================
+_SYN_KEYWORDS = ("def class import from return if elif else for while in not and or try except finally raise "
+                 "with as is lambda yield async await pass break continue global function const let var new throw "
+                 "catch public private protected static void final package interface extends implements switch "
+                 "case default do echo then fi esac done select insert update delete where join create table "
+                 "SELECT INSERT UPDATE DELETE FROM WHERE JOIN CREATE TABLE INTO VALUES SET").split()
+_SYN_RE = re.compile("|".join([
+    r"(?P<comment>^[ \t]*(?:#|//).*$)",
+    r"(?P<icomment>[ \t](?:#|//)[ \t].*$)",
+    r"(?P<key>\"(?:[^\"\\\n]|\\.)*\"(?=[ \t]*:))",
+    r"(?P<string>\"(?:[^\"\\\n]|\\.)*\"|(?<![A-Za-z0-9])'(?:[^'\\\n]|\\.)*'(?![A-Za-z0-9]))",
+    r"(?P<url>\bhttps?://[^\s\"'<>]+)",
+    r"(?P<time>\b\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}:\d{2}(?:[.,]\d+)?(?:Z|[+-]\d{2}:?\d{2})?)?\b"
+    r"|\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2}\s+\d{2}:\d{2}:\d{2}\b"
+    r"|\b\d{2}:\d{2}:\d{2}(?:[.,]\d+)?\b)",
+    r"(?P<error>\b(?:ERROR|ERR|FATAL|CRITICAL|CRIT|SEVERE|EMERG|ALERT|PANIC|FAIL(?:ED|URE)?|Traceback|"
+    r"[Ee]rror|[Ff]ailed|[Ff]ailure|[Dd]enied|[Rr]efused|[Tt]imed out|[Uu]nreachable|"
+    r"[A-Z][A-Za-z0-9_]*(?:Exception|Error))\b)",
+    r"(?P<warn>\b(?:WARN(?:ING)?|[Ww]arning|[Dd]eprecated)\b)",
+    r"(?P<info>\b(?:INFO|NOTICE)\b)",
+    r"(?P<debug>\b(?:DEBUG|TRACE|FINE|FINER|FINEST)\b)",
+    r"(?P<kw>\b(?:" + "|".join(_SYN_KEYWORDS) + r"|true|false|null|None|True|False|nil|undefined|self|this)\b)",
+    r"(?P<prop>^[ \t]*-?[ \t]*[A-Za-z_][\w.\-]*(?=[ \t]*(?::[ \t]|:$|=))|\b[A-Za-z_][\w.\-]*(?==[^=\s]))",
+    r"(?P<num>\b\d+(?:\.\d+)*\b)",
+]), re.M)
+_SYN_CODE = re.compile(r"(?m)^[ \t]*(?:def |class |import |from \S+ import |function |const |let |var |public |"
+                       r"private |package |#include|@\w+|if \(|for \(|SELECT |select )|[{};][ \t]*$|=>")
+_SYN_CODE_LINE = re.compile(r"^[ \t]*(?:def|class|import|from|return|if|elif|else|for|while|try|except|finally|"
+                            r"raise|with|function|const|let|var|public|private|protected|static|catch|switch|case|"
+                            r"yield|await|async|throw|SELECT|select|INSERT|UPDATE|DELETE)\b|[{}():;,\[\]][ \t]*$|"
+                            r"^[ \t]*[}\])]|\S[ \t]+=[ \t]+\S")
+_SYN_ALWAYS = {"true", "false", "null", "None", "True", "False", "nil", "undefined"}
+
+def syntax_spans(text, limit=200_000):
+    """[(start, end, kind)] colouring logs, configs and code: log levels, errors, timestamps, strings,
+    keys, numbers, comments, URLs and keywords. Keywords and trailing comments are only coloured on
+    lines that look like code, so 'in', 'as' or 'for' in a log sentence stay plain."""
+    if not text or len(text) > limit: return []
+    code = bool(_SYN_CODE.search(text))
+    lines = {}
+    def code_line(pos):
+        ls = text.rfind("\n", 0, pos) + 1
+        if ls not in lines:
+            le = text.find("\n", pos)
+            lines[ls] = bool(_SYN_CODE_LINE.search(text[ls:le if le >= 0 else len(text)]))
+        return lines[ls]
+    out = []
+    for m in _SYN_RE.finditer(text):
+        kind = m.lastgroup
+        if kind in ("kw", "icomment"):
+            always = kind == "kw" and m.group(0) in _SYN_ALWAYS
+            if not always and not (code and code_line(m.start())): continue
+            if kind == "icomment": kind = "comment"
+        out.append((m.start(), m.end(), kind))
+    return out
+
+
+# =====================================================================
 #  TEXT FILES — read and write keeping encoding, BOM and line endings
 # =====================================================================
 TEXT_FILETYPES = [("Text", "*.txt *.log *.csv *.tsv *.json *.yaml *.yml *.conf *.cfg *.ini *.env *.xml "
@@ -1126,7 +1185,7 @@ STRINGS = {
         "term_need": "Select a word or phrase first.", "term_token": "That is already a token.",
         "term_added": "Added to custom terms: {s}", "term_exists": "Already a custom term: {s}",
         "btn_open": "Open file…", "busy": "Working on {size}…", "on_clip": " · on the clipboard",
-        "terms_updated": "Custom terms updated", "cats": "Categories",
+        "terms_updated": "Custom terms updated", "cats": "Categories", "colors": "Colours",
         "file_masked": "Saved {name} — {n} items masked.", "file_masked_1": "Saved {name} — 1 item masked.",
         "file_restored": "Saved {name} — {n} values restored. It contains real data.",
         "file_restored_1": "Saved {name} — 1 value restored. It contains real data.",
@@ -1221,7 +1280,7 @@ STRINGS = {
         "term_need": "Önce bir kelime ya da ifade seç.", "term_token": "Bu zaten bir etiket.",
         "term_added": "Özel terimlere eklendi: {s}", "term_exists": "Zaten özel terimlerde: {s}",
         "btn_open": "Dosya aç…", "busy": "{size} işleniyor…", "on_clip": " · panoda",
-        "terms_updated": "Özel terimler güncellendi", "cats": "Kategoriler",
+        "terms_updated": "Özel terimler güncellendi", "cats": "Kategoriler", "colors": "Renkler",
         "file_masked": "{name} kaydedildi — {n} öğe maskelendi.",
         "file_restored": "{name} kaydedildi — {n} değer geri çevrildi. Gerçek veri içerir.",
         "file_bad": "{name} okunamadı: {e}", "file_not_saved": "Kaydedilmedi — sonuç kutularda.",
@@ -1666,10 +1725,40 @@ def run_gui(agent):
             t._textbox.configure(tabs=(tkfont.Font(font=t._textbox.cget("font")).measure("    "),))
         except Exception:
             pass
+        for kind, col in SYN_COLORS.items():
+            t.tag_config("syn_" + kind, foreground=col)
+        job = [None]
+        def later(*_):
+            if job[0]: root.after_cancel(job[0])
+            job[0] = root.after(350, lambda: colorize(t))
+        t.bind("<KeyRelease>", later, add=True)
+        t.bind("<<Paste>>", later, add=True)
         return t
 
+    # syntax colours: display only, the text itself never changes
+    SYN_COLORS = {"error": "#FF7B72", "warn": "#E3B341", "info": "#79C0FF", "debug": "#6E7681",
+                  "time": "#8C97AB", "comment": "#6E7681", "string": "#A5D6FF", "key": "#7EE787",
+                  "prop": "#7EE787", "kw": "#D2A8FF", "num": "#F2CC8F", "url": "#79C0FF"}
+    syntax_on = [agent.mapper.settings.get("syntax", True)]
+    def colorize(tb):
+        for kind in SYN_COLORS: tb.tag_remove("syn_" + kind, "1.0", "end")
+        if not syntax_on[0]: return
+        text = tb.get("1.0", "end-1c")
+        spans = syntax_spans(text)
+        if not spans: return
+        starts = [0] + [i + 1 for i, ch in enumerate(text) if ch == "\n"]
+        from bisect import bisect_right
+        def idx(o):
+            ln = bisect_right(starts, o) - 1
+            return "%d.%d" % (ln + 1, o - starts[ln])
+        for a, b, kind in spans:
+            tb.tag_add("syn_" + kind, idx(a), idx(b))
+        for tag in ("fake", "real", "sel"):
+            try: tb.tag_raise(tag)
+            except Exception: pass
+
     def set_text(tb, s):
-        tb.delete("1.0", "end"); tb.insert("1.0", s)
+        tb.delete("1.0", "end"); tb.insert("1.0", s); colorize(tb)
 
     def show_fakes(tb, text):
         text = text.replace("\r\n", "\n")
@@ -1894,6 +1983,15 @@ def run_gui(agent):
     agent.get_opts = get_opts
     # categories fold away behind one button; the button shows how many are on
     cats_open = [bool(agent.mapper.settings.get("cats_open", False))]
+    def toggle_syntax():
+        syntax_on[0] = bool(syn_var.get())
+        agent.mapper.settings["syntax"] = syntax_on[0]; agent.mapper.save()
+        for tb in (src, masked_out, reply, restored_out): colorize(tb)
+    syn_var = tk.BooleanVar(value=syntax_on[0])
+    syn_sw = ctk.CTkSwitch(tabbar, variable=syn_var, onvalue=True, offvalue=False, command=toggle_syntax,
+                           switch_width=36, switch_height=18, progress_color=TEAL, fg_color=BORDER2,
+                           button_color="#F2F6FB", button_hover_color="#FFFFFF", font=F(12), text_color=MUTED)
+    tx(syn_sw, "colors").pack(side="right", padx=(12, 0))
     cats_btn = ctk.CTkButton(tabbar, text="", width=10, height=30, corner_radius=9, font=F(12, "bold"),
                              **BTN["secondary"])
     def cats_text():
@@ -1934,6 +2032,7 @@ def run_gui(agent):
         holds the previous masked text."""
         prev = masked_out.get("1.0", "end-1c")
         txt = src.get("1.0", "end-1c")
+        colorize(src)
         if not txt.strip(): return gui.flash(T("need_input"))
         opts = get_opts()
         def done(masked, n):

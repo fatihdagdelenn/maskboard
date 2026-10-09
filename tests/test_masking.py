@@ -252,6 +252,20 @@ def check_custom_terms(engine):
     return problems
 
 
+def check_syntax_colours(engine):
+    """Display colours: log levels, strings and keys are found; English words in a log stay plain."""
+    log = "2026-10-01 10:00:00 ERROR login failed for alice in 5s, user=bob\n"
+    code = "import os\ndef f(x):\n    if x in y:  # note\n        return \"ok\"\n"
+    kinds = lambda t: [(t[s:e], k) for s, e, k in engine.syntax_spans(t)]
+    problems = []
+    want_log = [("2026-10-01 10:00:00", "time"), ("ERROR", "error"), ("failed", "error"), ("user", "prop")]
+    if kinds(log) != want_log: problems.append("log colours: %r" % kinds(log))
+    k = dict(kinds(code))
+    if k.get("in") != "kw" or k.get('"ok"') != "string" or k.get(" # note") != "comment":
+        problems.append("code colours: %r" % kinds(code))
+    return problems
+
+
 def check_classify(engine):
     m = engine.Mapper(store=None)
     m.anonymize("kemal@web01:~$ ping 10.10.10.20")
@@ -280,7 +294,7 @@ CHECKS = (("consistency across messages", check_consistency), ("Windows line end
           ("password keys in several languages", check_password_languages),
           ("token boundaries", check_token_boundaries), ("domain and URL tokens", check_urls_and_domains),
           ("national ID (T.C. kimlik no)", check_national_id), ("custom terms", check_custom_terms),
-          ("classify + restore", check_classify))
+          ("syntax colours", check_syntax_colours), ("classify + restore", check_classify))
 
 
 # ---- pytest entry points ----

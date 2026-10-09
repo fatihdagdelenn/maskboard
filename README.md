@@ -136,6 +136,14 @@ them except Date are on by default; turn off any that masks too much. For words 
 detected automatically, such as a company name, select them in the input and press `Alt+M`
 or right-click → *Add to custom terms* (see [Custom terms](#custom-terms)).
 
+**Colours.** The text boxes colour what they show to make logs and code easier to read: error,
+warning, info and debug levels, exception names, timestamps, quoted strings, `key=value` and
+`key:` names, numbers, comments, URLs and, on lines that look like code, keywords such as `def`,
+`if` or `return`. Masked tokens and restored values keep their own highlight on top. Colouring
+is display only, the text you copy never changes, and it is skipped for very large texts. Turn it
+off with the **Colours** switch on the tab bar (web: in the header; the web page colours the two
+output boxes).
+
 The **EN | TR** switch in the header changes the interface language immediately. The
 choice is remembered.
 

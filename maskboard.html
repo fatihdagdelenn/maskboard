@@ -214,6 +214,11 @@
   .cats summary:hover{border-color:var(--act);color:var(--text)}
   .cats summary b{font-family:var(--mono);font-weight:500;color:var(--act-2)}
   .cats .groups{margin:10px 0 0}
+  .synsw{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--text-dim);cursor:pointer;user-select:none}
+  .synsw input{accent-color:var(--act)}
+  .sy-error{color:#ff7b72}.sy-warn{color:#e3b341}.sy-info{color:#79c0ff}.sy-debug,.sy-comment{color:#6e7681}
+  .sy-time{color:#8c97ab}.sy-string{color:#a5d6ff}.sy-key,.sy-prop{color:#7ee787}.sy-kw{color:#d2a8ff}
+  .sy-num{color:#f2cc8f}.sy-url{color:#79c0ff;text-decoration:underline;text-decoration-color:rgba(121,192,255,.35)}
   textarea.drop{border-color:var(--act);box-shadow:0 0 0 3px rgba(79,179,217,.25);background:#0f1822}
   .file-chip{display:none;align-items:center;gap:8px;margin-top:8px;font-family:var(--mono);font-size:11.5px;
     color:var(--text-dim)}
@@ -264,12 +269,13 @@
     <div class="brand">
       <div class="logo" aria-hidden="true"></div>
       <div>
-        <h1>MaskBoard <span class="ver">v1.1.0</span></h1>
+        <h1>MaskBoard <span class="ver">v1.2.0</span></h1>
         <div class="sub" data-i18n="tagline"></div>
       </div>
     </div>
     <div class="hdr-right">
       <div class="offline"><span class="dot"></span> <span data-i18n="offline"></span></div>
+      <label class="synsw"><input type="checkbox" id="synOn" checked> <span data-i18n="colors"></span></label>
       <div class="langsw" role="group" aria-label="Language">
         <button data-lang="en">EN</button><button data-lang="tr">TR</button>
       </div>
@@ -1384,7 +1390,7 @@ const MaskBoardEngine = (function () {
       out_title: "Outgoing — text for the AI", real_data: "REAL DATA",
       out_hint: "Paste a log, config, <code>ip a</code>, <code>docker ps</code> or <code>.env</code> output — or drop a .txt / .log / .csv file here. <kbd>Ctrl</kbd>+<kbd>Enter</kbd> masks it; select a word and press <kbd>Alt</kbd>+<kbd>M</kbd> to add it to the custom terms.",
       src_ph: "e.g.\nadmin@web01:~/projects/shop$ docker ps\nweb01  10.10.10.20   dns: app.example-corp.com\nDB_URL=postgres://appuser:S3cret.1@db01:5432/appdb\neth0: inet 185.12.34.56/24",
-      move_to_reply: "Move to Restore", cats: "Categories",
+      move_to_reply: "Move to Restore", cats: "Categories", colors: "Colours",
       terms_title: "Custom terms", terms_count: "{n} terms", terms_count_1: "1 term", terms_ph: "New term — Enter adds it",
       terms_add: "Add", terms_empty: "No custom terms yet. Type one above, or select text in the input and press <kbd>Alt</kbd>+<kbd>M</kbd>.",
       t_terms_added_n: "{n} custom terms added", t_term_removed: "Removed from custom terms: {s}", term_edit: "Double-click to edit", term_remove: "Remove",
@@ -1440,7 +1446,7 @@ const MaskBoardEngine = (function () {
       out_title: "Giden — AI'a gidecek metin", real_data: "GERÇEK VERİ",
       out_hint: "Log, config, <code>ip a</code>, <code>docker ps</code>, <code>.env</code> çıktısını yapıştır ya da .txt / .log / .csv dosyasını buraya bırak. <kbd>Ctrl</kbd>+<kbd>Enter</kbd> ile anonimleştir; bir kelimeyi seçip <kbd>Alt</kbd>+<kbd>M</kbd> ile özel terimlere ekle.",
       src_ph: "Örn:\nadmin@web01:~/projeler/stok$ docker ps\nweb01  10.10.10.20   dns: app.example-corp.com\nDB_URL=postgres://appuser:Gizli.123@db01:5432/appdb\neth0: inet 185.12.34.56/24",
-      move_to_reply: "Geri çevir alanına taşı", cats: "Kategoriler",
+      move_to_reply: "Geri çevir alanına taşı", cats: "Kategoriler", colors: "Renkler",
       terms_title: "Özel terimler", terms_count: "{n} terim", terms_count_1: "1 terim", terms_ph: "Yeni terim — Enter ile ekle",
       terms_add: "Ekle", terms_empty: "Henüz özel terim yok. Yukarıya yaz ya da girişte metni seçip <kbd>Alt</kbd>+<kbd>M</kbd>'ye bas.",
       t_terms_added_n: "{n} özel terim eklendi", t_term_removed: "Özel terimlerden çıkarıldı: {s}", term_edit: "Düzenlemek için çift tıkla", term_remove: "Sil",
@@ -1553,20 +1559,111 @@ const MaskBoardEngine = (function () {
   });
 
   const HIGHLIGHT_MAX = 2000000, BUSY_MIN = 400000;
+  // ---------- syntax colours for the outputs (display only, mirrors syntax_spans in maskboard.py) ----------
+  const SYN_KW = ("def class import from return if elif else for while in not and or try except finally raise " +
+    "with as is lambda yield async await pass break continue global function const let var new throw " +
+    "catch public private protected static void final package interface extends implements switch " +
+    "case default do echo then fi esac done select insert update delete where join create table " +
+    "SELECT INSERT UPDATE DELETE FROM WHERE JOIN CREATE TABLE INTO VALUES SET").split(" ");
+  const SYN_RE = new RegExp([
+    "(?<comment>^[ \\t]*(?:#|//).*$)",
+    "(?<icomment>[ \\t](?:#|//)[ \\t].*$)",
+    '(?<key>"(?:[^"\\\\\\n]|\\\\.)*"(?=[ \\t]*:))',
+    '(?<string>"(?:[^"\\\\\\n]|\\\\.)*"|(?<![A-Za-z0-9])\'(?:[^\'\\\\\\n]|\\\\.)*\'(?![A-Za-z0-9]))',
+    "(?<url>\\bhttps?://[^\\s\"'<>]+)",
+    "(?<time>\\b\\d{4}-\\d{2}-\\d{2}(?:[T ]\\d{2}:\\d{2}:\\d{2}(?:[.,]\\d+)?(?:Z|[+-]\\d{2}:?\\d{2})?)?\\b" +
+      "|\\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\\s+\\d{1,2}\\s+\\d{2}:\\d{2}:\\d{2}\\b" +
+      "|\\b\\d{2}:\\d{2}:\\d{2}(?:[.,]\\d+)?\\b)",
+    "(?<error>\\b(?:ERROR|ERR|FATAL|CRITICAL|CRIT|SEVERE|EMERG|ALERT|PANIC|FAIL(?:ED|URE)?|Traceback|" +
+      "[Ee]rror|[Ff]ailed|[Ff]ailure|[Dd]enied|[Rr]efused|[Tt]imed out|[Uu]nreachable|" +
+      "[A-Z][A-Za-z0-9_]*(?:Exception|Error))\\b)",
+    "(?<warn>\\b(?:WARN(?:ING)?|[Ww]arning|[Dd]eprecated)\\b)",
+    "(?<info>\\b(?:INFO|NOTICE)\\b)",
+    "(?<debug>\\b(?:DEBUG|TRACE|FINE|FINER|FINEST)\\b)",
+    "(?<kw>\\b(?:" + SYN_KW.join("|") + "|true|false|null|None|True|False|nil|undefined|self|this)\\b)",
+    "(?<prop>^[ \\t]*-?[ \\t]*[A-Za-z_][\\w.\\-]*(?=[ \\t]*(?::[ \\t]|:$|=))|\\b[A-Za-z_][\\w.\\-]*(?==[^=\\s]))",
+    "(?<num>\\b\\d+(?:\\.\\d+)*\\b)",
+  ].join("|"), "gm");
+  const SYN_CODE = /^[ \t]*(?:def |class |import |from \S+ import |function |const |let |var |public |private |package |#include|@\w+|if \(|for \(|SELECT |select )|[{};][ \t]*$|=>/m;
+  const SYN_CODE_LINE = /^[ \t]*(?:def|class|import|from|return|if|elif|else|for|while|try|except|finally|raise|with|function|const|let|var|public|private|protected|static|catch|switch|case|yield|await|async|throw|SELECT|select|INSERT|UPDATE|DELETE)\b|[{}():;,\[\]][ \t]*$|^[ \t]*[}\])]|\S[ \t]+=[ \t]+\S/;
+  const SYN_ALWAYS = new Set(["true", "false", "null", "None", "True", "False", "nil", "undefined"]);
+  const SYN_KEY = "maskboard-colors";
+  let synOn = lsGet(SYN_KEY) !== "0";
+  function syntaxSpans(text) {
+    if (!synOn || !text || text.length > 200000) return [];
+    const code = SYN_CODE.test(text), lines = new Map(), out = [];
+    const codeLine = pos => {
+      const ls = text.lastIndexOf("\n", pos - 1) + 1;
+      if (!lines.has(ls)) {
+        const le = text.indexOf("\n", pos);
+        lines.set(ls, SYN_CODE_LINE.test(text.slice(ls, le < 0 ? text.length : le)));
+      }
+      return lines.get(ls);
+    };
+    for (const mt of text.matchAll(SYN_RE)) {
+      if (!mt[0]) continue;
+      let kind = Object.keys(mt.groups).find(k => mt.groups[k] !== undefined);
+      if (kind === "kw" || kind === "icomment") {
+        const always = kind === "kw" && SYN_ALWAYS.has(mt[0]);
+        if (!always && !(code && codeLine(mt.index))) continue;
+        if (kind === "icomment") kind = "comment";
+      }
+      out.push([mt.index, mt.index + mt[0].length, kind]);
+    }
+    return out;
+  }
+  /** HTML for text with syntax colours; marks = sorted [start, end, html] drawn instead of the text there */
+  function colorHTML(text, marks) {
+    const spans = syntaxSpans(text);
+    let si = 0;
+    const plain = (a, b) => {
+      let out = "", p = a;
+      while (si < spans.length && spans[si][1] <= a) si++;
+      for (let k = si; k < spans.length && spans[k][0] < b; k++) {
+        const s = Math.max(spans[k][0], p), e = Math.min(spans[k][1], b);
+        if (e <= s) continue;
+        if (s > p) out += esc(text.slice(p, s));
+        out += `<span class="sy-${spans[k][2]}">${esc(text.slice(s, e))}</span>`; p = e;
+      }
+      return out + esc(text.slice(p, b));
+    };
+    let html = "", pos = 0;
+    for (const [s, e, mk] of marks) { html += plain(pos, s) + mk; pos = e; }
+    return html + plain(pos, text.length);
+  }
   function highlightTokens(text) {
     if (text.length > HIGHLIGHT_MAX) return esc(text);
-    const idx = new Map(m.entries.map(e => [e.fake, e]));
-    let html = "", i = 0;
+    const idx = new Map(m.entries.map(e => [e.fake, e])), marks = [];
     for (const tk of text.matchAll(E.TOKEN_RE)) {
       const e = idx.get(tk[0]);
       if (!e) continue;
-      html += esc(text.slice(i, tk.index));
       const real = e.secret ? MASK : e.real;
-      html += `<mark class="${e.secret ? "s" : "m"}" title="${esc(real)} · ${esc(typeLabel(e.type))}">${esc(tk[0])}</mark>`;
-      i = tk.index + tk[0].length;
+      marks.push([tk.index, tk.index + tk[0].length,
+        `<mark class="${e.secret ? "s" : "m"}" title="${esc(real)} · ${esc(typeLabel(e.type))}">${esc(tk[0])}</mark>`]);
     }
-    return html + esc(text.slice(i));
+    return colorHTML(text, marks);
   }
+  /** restored text with the restored values marked; returns [plain, html] */
+  function restoredHTML(text) {
+    const [marked] = m.restore(text, r => "\u0000" + r + "\u0001");
+    const marks = []; let plain = "";
+    for (const part of marked.split(/(\u0000[\s\S]*?\u0001)/)) {
+      if (part.startsWith("\u0000")) {
+        const real = part.slice(1, -1);
+        marks.push([plain.length, plain.length + real.length, `<mark class="r">${esc(real)}</mark>`]);
+        plain += real;
+      } else plain += part;
+    }
+    return [plain, plain.length > HIGHLIGHT_MAX ? esc(plain) : colorHTML(plain, marks)];
+  }
+  function rerender() {
+    const mk = $("masked");
+    if (mk.dataset.plain) mk.innerHTML = highlightTokens(mk.dataset.plain);
+    if ($("restored").dataset.plain && lastReply) $("restored").innerHTML = restoredHTML(lastReply)[1];
+  }
+  let lastReply = "";
+  $("synOn").checked = synOn;
+  $("synOn").onchange = e => { synOn = e.target.checked; lsSet(SYN_KEY, synOn ? "1" : "0"); rerender(); };
 
   // ---------- mask ----------
   let lastCount = null;
@@ -1769,11 +1866,7 @@ const MaskBoardEngine = (function () {
     later(text.length, () => {
       const [plain, n] = m.restore(text);
       const el = $("restored");
-      if (plain.length > HIGHLIGHT_MAX) el.textContent = plain;
-      else {
-        const [marked] = m.restore(text, r => "\u0000" + r + "\u0001");
-        el.innerHTML = esc(marked).replace(/\u0000([\s\S]*?)\u0001/g, '<mark class="r">$1</mark>');
-      }
+      el.innerHTML = restoredHTML(text)[1]; lastReply = text;
       el.dataset.plain = plain;
       bump(el);
       $("btnCopyRestored").disabled = $("btnSaveRestored").disabled = !plain.length;
