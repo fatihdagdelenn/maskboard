@@ -10,6 +10,9 @@ if not exist "maskboard.py" (
   exit /b 1
 )
 
+REM A running MaskBoard.exe (often hidden in the tray) locks dist\MaskBoard.exe and makes the build fail.
+taskkill /IM MaskBoard.exe /F >nul 2>&1
+
 echo [1/3] Installing packages...
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt pyinstaller

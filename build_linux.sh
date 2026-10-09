@@ -26,6 +26,8 @@ echo "[2/4] Virtual environment and packages (.venv)..."
 [ -d .venv ] || $PY -m venv .venv
 . .venv/bin/activate
 python -m pip install --quiet --upgrade pip
+# a running maskboard keeps dist/maskboard busy
+pkill -x maskboard 2>/dev/null || true
 python -m pip install --quiet -r requirements.txt pyinstaller
 
 echo "[3/4] Building..."

@@ -197,8 +197,23 @@
   .tag{white-space:nowrap}
   td.c-fake{word-break:normal;white-space:nowrap}
   textarea,pre.render{tab-size:4;-moz-tab-size:4}
-  #src,#reply{min-height:260px}
-  pre.render{max-height:520px}
+  #src,#reply{min-height:340px}
+  pre.render{min-height:220px;max-height:640px}
+  .wrap{max-width:1360px}
+  .grid{grid-template-columns:1fr 360px}
+  @media(max-width:900px){.grid{grid-template-columns:1fr}}
+  h1 .ver{font-size:11px;font-weight:500;color:var(--text-faint);font-family:var(--mono);margin-left:4px}
+  .pbody .hint{font-size:12px;margin-bottom:9px}
+  .cats{margin:10px 0 0}
+  .cats summary{display:inline-flex;align-items:center;gap:8px;cursor:pointer;user-select:none;list-style:none;
+    font-size:12.5px;font-weight:600;color:var(--text-dim);padding:6px 11px;border:1px solid var(--line);
+    border-radius:7px;background:var(--panel-2)}
+  .cats summary::-webkit-details-marker{display:none}
+  .cats summary::after{content:"▾";font-size:11px;color:var(--text-faint)}
+  .cats[open] summary::after{content:"▴"}
+  .cats summary:hover{border-color:var(--act);color:var(--text)}
+  .cats summary b{font-family:var(--mono);font-weight:500;color:var(--act-2)}
+  .cats .groups{margin:10px 0 0}
   textarea.drop{border-color:var(--act);box-shadow:0 0 0 3px rgba(79,179,217,.25);background:#0f1822}
   .file-chip{display:none;align-items:center;gap:8px;margin-top:8px;font-family:var(--mono);font-size:11.5px;
     color:var(--text-dim)}
@@ -212,7 +227,23 @@
     color:var(--text-dim)}
   .terms-head b{color:var(--text);font-weight:600}
   .terms-head span{font-family:var(--mono);font-size:11px;color:var(--text-faint)}
-  .terms textarea{min-height:92px;font-size:12.5px;line-height:1.5;padding:8px 10px}
+  .term-add{display:flex;gap:7px}
+  .term-add input{flex:1;min-width:0;background:var(--ink);color:var(--text);border:1px solid var(--line);border-radius:7px;
+    padding:7px 10px;font-family:var(--mono);font-size:12.5px;outline:none}
+  .term-add input:focus{border-color:var(--act)}
+  .term-add input::placeholder{color:var(--text-faint)}
+  .term-list{list-style:none;margin:8px 0 0;padding:4px;max-height:240px;overflow:auto;background:var(--ink);
+    border:1px solid var(--line);border-radius:8px}
+  .term-list li{display:flex;align-items:flex-start;gap:8px;padding:5px 6px;border-radius:6px;font-family:var(--mono);
+    font-size:12.5px;line-height:1.45}
+  .term-list li:nth-child(odd){background:var(--panel-2)}
+  .term-list .n{flex:none;min-width:22px;text-align:right;color:var(--text-faint);font-size:11px;padding-top:1px}
+  .term-list .tx{flex:1;min-width:0;word-break:break-word;color:var(--text);cursor:text}
+  .term-list .x{flex:none;padding:0 6px;border:0;background:transparent;color:var(--text-faint);font-size:15px;line-height:1.2;
+    transform:none}
+  .term-list .x:hover{color:var(--real);background:var(--real-bg);transform:none}
+  .term-list li.empty-term{display:block;background:transparent;font-family:var(--sans);font-size:12px;color:var(--text-faint);
+    padding:8px}
   .terms .hint{margin:8px 0 0;font-size:11.5px;line-height:1.5}
   .ctx{position:fixed;z-index:60;min-width:230px;max-width:360px;padding:5px;background:var(--panel-2);
     border:1px solid var(--line);border-radius:9px;box-shadow:0 12px 32px rgba(0,0,0,.5);display:none}
@@ -233,7 +264,7 @@
     <div class="brand">
       <div class="logo" aria-hidden="true"></div>
       <div>
-        <h1>MaskBoard</h1>
+        <h1>MaskBoard <span class="ver">v1.1.0</span></h1>
         <div class="sub" data-i18n="tagline"></div>
       </div>
     </div>
@@ -269,7 +300,10 @@
             <button class="ghost" id="btnMoveToReply" data-i18n="move_to_reply"></button>
           </div>
 
-          <div class="groups" id="groups"></div>
+          <details class="cats" id="cats">
+            <summary><span data-i18n="cats"></span> <b id="catCount"></b></summary>
+            <div class="groups" id="groups"></div>
+          </details>
           <div class="row">
             <button class="primary" id="btnMask" data-i18n="btn_mask"></button>
             <button class="ghost" id="btnCopyMasked" disabled data-i18n="btn_copy_masked"></button>
@@ -334,7 +368,11 @@
         </label>
         <div class="terms">
           <div class="terms-head"><b data-i18n="terms_title"></b><span id="termCount"></span></div>
-          <textarea id="customTerms" spellcheck="false" data-i18n-ph="terms_ph"></textarea>
+          <div class="term-add">
+            <input id="termInput" spellcheck="false" autocomplete="off" data-i18n-ph="terms_ph">
+            <button class="ghost mini" id="btnAddTerm" data-i18n="terms_add"></button>
+          </div>
+          <ol class="term-list" id="termList"></ol>
           <p class="hint" data-i18n="terms_hint"></p>
         </div>
         <div class="led-tools" style="padding-top:10px;padding-bottom:10px">
@@ -1346,9 +1384,11 @@ const MaskBoardEngine = (function () {
       out_title: "Outgoing — text for the AI", real_data: "REAL DATA",
       out_hint: "Paste a log, config, <code>ip a</code>, <code>docker ps</code> or <code>.env</code> output — or drop a .txt / .log / .csv file here. <kbd>Ctrl</kbd>+<kbd>Enter</kbd> masks it; select a word and press <kbd>Alt</kbd>+<kbd>M</kbd> to add it to the custom terms.",
       src_ph: "e.g.\nadmin@web01:~/projects/shop$ docker ps\nweb01  10.10.10.20   dns: app.example-corp.com\nDB_URL=postgres://appuser:S3cret.1@db01:5432/appdb\neth0: inet 185.12.34.56/24",
-      move_to_reply: "Move to Restore",
-      terms_title: "Custom terms", terms_count: "{n} terms", terms_count_1: "1 term", terms_ph: "One per line, e.g.\nAcme Holding\nproject-x\nCustomer Name Ltd.",
-      terms_hint: "Company, product or project names — long phrases too. Matched as whole words and identifier parts (<code>ACME_Prod</code>, <code>AcmeUser</code>); case, Turkish letters and extra spaces are ignored. Select text in the input and press <kbd>Alt</kbd>+<kbd>M</kbd> or right-click to add it.",
+      move_to_reply: "Move to Restore", cats: "Categories",
+      terms_title: "Custom terms", terms_count: "{n} terms", terms_count_1: "1 term", terms_ph: "New term — Enter adds it",
+      terms_add: "Add", terms_empty: "No custom terms yet. Type one above, or select text in the input and press <kbd>Alt</kbd>+<kbd>M</kbd>.",
+      t_terms_added_n: "{n} custom terms added", t_term_removed: "Removed from custom terms: {s}", term_edit: "Double-click to edit", term_remove: "Remove",
+      terms_hint: "Company, product or project names — long phrases too. Matched as whole words and identifier parts (<code>ACME_Prod</code>, <code>AcmeUser</code>); case, Turkish letters and extra spaces are ignored. Pasting several lines adds each one; double-click a term to edit it, × removes it. Select text in the input and press <kbd>Alt</kbd>+<kbd>M</kbd> or right-click to add it.",
       ctx_add: "Add “{s}” to custom terms", ctx_cut: "Cut", ctx_copy: "Copy", ctx_note: "Shift + right-click opens the browser menu",
       t_term_need: "Select a word or phrase first.", t_term_token: "That is already a token.",
       t_term_added: "Added to custom terms: {s}", t_term_exists: "Already a custom term: {s}",
@@ -1400,9 +1440,11 @@ const MaskBoardEngine = (function () {
       out_title: "Giden — AI'a gidecek metin", real_data: "GERÇEK VERİ",
       out_hint: "Log, config, <code>ip a</code>, <code>docker ps</code>, <code>.env</code> çıktısını yapıştır ya da .txt / .log / .csv dosyasını buraya bırak. <kbd>Ctrl</kbd>+<kbd>Enter</kbd> ile anonimleştir; bir kelimeyi seçip <kbd>Alt</kbd>+<kbd>M</kbd> ile özel terimlere ekle.",
       src_ph: "Örn:\nadmin@web01:~/projeler/stok$ docker ps\nweb01  10.10.10.20   dns: app.example-corp.com\nDB_URL=postgres://appuser:Gizli.123@db01:5432/appdb\neth0: inet 185.12.34.56/24",
-      move_to_reply: "Geri çevir alanına taşı",
-      terms_title: "Özel terimler", terms_count: "{n} terim", terms_count_1: "1 terim", terms_ph: "Her satıra bir terim, örn.\nAcme Holding\nproje-x\nMüşteri Adı A.Ş.",
-      terms_hint: "Firma, ürün ya da proje adları — uzun ifadeler de olur. Tam kelime ve tanımlayıcı parçası olarak bulunur (<code>ACME_Prod</code>, <code>AcmeUser</code>); büyük/küçük harf, Türkçe harfler ve fazla boşluklar önemsizdir. Girişte metni seçip <kbd>Alt</kbd>+<kbd>M</kbd>'ye bas ya da sağ tıklayıp ekle.",
+      move_to_reply: "Geri çevir alanına taşı", cats: "Kategoriler",
+      terms_title: "Özel terimler", terms_count: "{n} terim", terms_count_1: "1 terim", terms_ph: "Yeni terim — Enter ile ekle",
+      terms_add: "Ekle", terms_empty: "Henüz özel terim yok. Yukarıya yaz ya da girişte metni seçip <kbd>Alt</kbd>+<kbd>M</kbd>'ye bas.",
+      t_terms_added_n: "{n} özel terim eklendi", t_term_removed: "Özel terimlerden çıkarıldı: {s}", term_edit: "Düzenlemek için çift tıkla", term_remove: "Sil",
+      terms_hint: "Firma, ürün ya da proje adları — uzun ifadeler de olur. Tam kelime ve tanımlayıcı parçası olarak bulunur (<code>ACME_Prod</code>, <code>AcmeUser</code>); büyük/küçük harf, Türkçe harfler ve fazla boşluklar önemsizdir. Birden çok satır yapıştırırsan her satır ayrı terim olur; düzenlemek için terime çift tıkla, × siler. Girişte metni seçip <kbd>Alt</kbd>+<kbd>M</kbd>'ye bas ya da sağ tıklayıp ekle.",
       ctx_add: "“{s}” özel terimlere ekle", ctx_cut: "Kes", ctx_copy: "Kopyala", ctx_note: "Shift + sağ tık tarayıcı menüsünü açar",
       t_term_need: "Önce bir kelime ya da ifade seç.", t_term_token: "Bu zaten bir etiket.",
       t_term_added: "Özel terimlere eklendi: {s}", t_term_exists: "Zaten özel terimlerde: {s}",
@@ -1474,7 +1516,6 @@ const MaskBoardEngine = (function () {
   const persistOn = lsGet(PREF) === "1";
   const m = new E.Mapper(persistOn ? storage : null);
   $("persist").checked = persistOn;
-  if (m.customTerms && m.customTerms.length) $("customTerms").value = m.customTerms.join("\n");
 
   // ---------- type chips ----------
   const GROUPS = [["grp_net", ["ipv4", "ipv6", "domain", "url", "hostname", "mac", "iface"]],
@@ -1486,12 +1527,16 @@ const MaskBoardEngine = (function () {
     ts.map(x => `<label class="tog${E.DEFAULT_OFF.has(x) ? " off-default" : ""}">` +
                 `<input type="checkbox" data-t="${x}"${E.DEFAULT_OFF.has(x) ? "" : " checked"}> <span data-type="${x}"></span></label>`).join("") +
     `</div></div>`).join("");
-  const readOpts = () => { const o = {}; document.querySelectorAll("#groups input").forEach(c => o[c.dataset.t] = c.checked); return o; };
-  const customList = () => E.normTerms($("customTerms").value.split("\n"));
-  const showTermCount = () => {
-    const n = m.customTerms.length;
-    $("termCount").textContent = t(n === 1 ? "terms_count_1" : "terms_count", { n });
+  const CATS_KEY = "maskboard-cats";
+  const catCount = () => {
+    const all = document.querySelectorAll("#groups input");
+    $("catCount").textContent = [...all].filter(c => c.checked).length + "/" + all.length;
   };
+  $("groups").addEventListener("change", catCount);
+  $("cats").open = lsGet(CATS_KEY) === "1";
+  $("cats").addEventListener("toggle", () => lsSet(CATS_KEY, $("cats").open ? "1" : "0"));
+  catCount();
+  const readOpts = () => { const o = {}; document.querySelectorAll("#groups input").forEach(c => o[c.dataset.t] = c.checked); return o; };
 
   function applyLang() {
     document.documentElement.lang = lang;
@@ -1501,7 +1546,7 @@ const MaskBoardEngine = (function () {
     document.querySelectorAll("[data-i18n-empty]").forEach(el => { el.dataset.empty = t(el.dataset.i18nEmpty); });
     document.querySelectorAll("[data-type]").forEach(el => { el.textContent = typeLabel(el.dataset.type); });
     document.querySelectorAll(".langsw button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.lang === lang)));
-    setMaskedCount(lastCount); renderLedger(); updateStatus(); checkSmart(); showTermCount(); showFileChips();
+    setMaskedCount(lastCount); renderLedger(); updateStatus(); checkSmart(); renderTerms(); showFileChips();
   }
   document.querySelectorAll(".langsw button").forEach(b => b.onclick = () => {
     lang = b.dataset.lang; lsSet(LANG_KEY, lang); applyLang();
@@ -1530,7 +1575,6 @@ const MaskBoardEngine = (function () {
   function anonymize(note) {
     const text = fileText("src");
     if (!text.trim()) { toast(t("t_need_src")); return; }
-    m.setCustom(customList()); showTermCount();
     later(text.length, () => {
       const before = m.entries.length;
       const [out, n] = m.anonymize(text, readOpts());
@@ -1624,19 +1668,61 @@ const MaskBoardEngine = (function () {
     const sel = window.getSelection();
     return sel && sel.rangeCount && el.contains(sel.anchorNode) ? sel.toString() : "";
   }
+  /** current terms plus the lines of raw (several lines = several terms) → [terms, added] */
+  function mergedTerms(raw) {
+    const cur = m.customTerms.slice(), known = new Set(cur.map(x => x.toLowerCase())), added = [];
+    for (const x of E.normTerms(String(raw).split(/\r?\n/))) {
+      if (E.isToken(x) || known.has(x.toLowerCase())) continue;
+      cur.push(x); known.add(x.toLowerCase()); added.push(x);
+    }
+    return [cur, added];
+  }
+  function renderTerms() {
+    const list = $("termList"), terms = m.customTerms;
+    const n = terms.length;
+    $("termCount").textContent = t(n === 1 ? "terms_count_1" : "terms_count", { n });
+    if (!n) { list.innerHTML = `<li class="empty-term">${t("terms_empty")}</li>`; return; }
+    list.innerHTML = terms.map((x, i) =>
+      `<li><span class="n">${i + 1}.</span><span class="tx" title="${esc(t("term_edit"))}">${esc(x)}</span>` +
+      `<button type="button" class="x" data-i="${i}" title="${esc(t("term_remove"))}">×</button></li>`).join("");
+  }
+  /** change the list; re-mask when there is a masked output to keep in step */
+  function setTerms(terms, note) {
+    m.setCustom(terms); renderTerms();
+    if (!note) return;
+    if ($("src").value.trim() && $("masked").dataset.plain) anonymize(note + " · "); else toast(note);
+  }
+  function addFromInput(raw) {
+    const [cur, added] = mergedTerms(raw);
+    $("termInput").value = "";
+    if (added.length) setTerms(cur, added.length === 1 ? t("t_term_added", { s: added[0] }) : t("t_terms_added_n", { n: added.length }));
+  }
+  $("btnAddTerm").onclick = () => addFromInput($("termInput").value);
+  $("termInput").addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); addFromInput($("termInput").value); } });
+  $("termInput").addEventListener("paste", e => {          // inputs drop line breaks: several lines = several terms
+    const text = (e.clipboardData || window.clipboardData).getData("text");
+    if (/[\r\n]/.test(text.trim())) { e.preventDefault(); addFromInput(text); }
+  });
+  $("termList").addEventListener("click", e => {
+    const b = e.target.closest("button.x");
+    if (!b) return;
+    const term = m.customTerms[+b.dataset.i];
+    setTerms(m.customTerms.filter((_, i) => i !== +b.dataset.i), t("t_term_removed", { s: term }));
+  });
+  $("termList").addEventListener("dblclick", e => {
+    const li = e.target.closest("li"), b = li && li.querySelector("button.x");
+    if (!b || e.target.closest("button.x")) return;
+    const i = +b.dataset.i, term = m.customTerms[i];
+    setTerms(m.customTerms.filter((_, k) => k !== i), null);
+    $("termInput").value = term; $("termInput").focus();
+  });
   function addTerm(raw) {
     const term = E.normTerm(raw);
     if (!term) { toast(t("t_term_need")); return; }
     if (E.isToken(term)) { toast(t("t_term_token")); return; }
-    m.setCustom(customList());
-    let note;
-    if (m.customTerms.some(x => x.toLowerCase() === term.toLowerCase())) note = t("t_term_exists", { s: term });
-    else {
-      const ta = $("customTerms"), cur = ta.value;
-      ta.value = cur + (cur && !cur.endsWith("\n") ? "\n" : "") + term;
-      m.setCustom(customList()); showTermCount();
-      note = t("t_term_added", { s: term });
-    }
+    const [cur, added] = mergedTerms(term);
+    if (added.length) { m.setCustom(cur); renderTerms(); }
+    const note = added.length ? t("t_term_added", { s: term }) : t("t_term_exists", { s: term });
     if ($("src").value.trim()) anonymize(note + " · "); else toast(note);
   }
   const ctx = $("ctx");
@@ -1707,11 +1793,6 @@ const MaskBoardEngine = (function () {
   }
   const hideSmart = () => $("smart").classList.remove("show");
   $("src").addEventListener("input", () => { clearTimeout(smartTimer); smartTimer = setTimeout(checkSmart, 250); });
-  $("customTerms").addEventListener("input", () => { m.setCustom(customList()); showTermCount(); clearTimeout(smartTimer); smartTimer = setTimeout(checkSmart, 250); });
-  // leaving the list after an edit masks the input again, so the output never lags behind the terms
-  $("customTerms").addEventListener("change", () => {
-    if ($("src").value.trim() && $("masked").dataset.plain) anonymize(t("t_terms_updated") + " · ");
-  });
   $("btnMoveToReply").onclick = () => {
     $("reply").value = $("src").value; $("src").value = ""; hideSmart(); restore();
     $("reply").scrollIntoView({ behavior: "smooth", block: "center" });
@@ -1782,8 +1863,8 @@ const MaskBoardEngine = (function () {
         const d = JSON.parse(r.result);
         if (!Array.isArray(d.entries)) throw 0;
         const added = m.importEntries(d.entries);
-        if (Array.isArray(d.custom_terms) && d.custom_terms.length && !$("customTerms").value.trim()) {
-          $("customTerms").value = E.normTerms(d.custom_terms).join("\n"); m.setCustom(customList()); showTermCount();
+        if (Array.isArray(d.custom_terms) && d.custom_terms.length && !m.customTerms.length) {
+          m.setCustom(d.custom_terms); renderTerms();
         }
         renderLedger(); updateStatus(); checkSmart();
         toast(added ? t("t_imported", { n: added }) : t("t_import_none"));
@@ -1818,6 +1899,7 @@ const MaskBoardEngine = (function () {
   $("btnMask").onclick = () => anonymize();
   $("btnRestore").onclick = restore;
   $("btnCopyMasked").onclick = () => { outCopied = true; copyFrom("masked", "w_masked"); };
+  $("masked").addEventListener("copy", () => { outCopied = true; });
   $("btnCopyRestored").onclick = () => copyFrom("restored", "w_result");
   $("btnClearIn").onclick = () => {
     $("src").value = ""; $("masked").innerHTML = ""; $("masked").dataset.plain = ""; files.src = null; showFileChips(); outCopied = false;

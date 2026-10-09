@@ -307,17 +307,19 @@ still masked: `password = "S3cret"` → `password = "PASSWORD_1"`. Whitespace is
 ## Custom terms
 
 Words that MaskBoard cannot know are sensitive, such as a company, a customer, a product or a
-project code, go into the **Custom terms** list on the Ledger tab (desktop) or in the ledger
-panel (web), one per line. Long names and phrases with spaces or commas are fine:
-`Acme Holding Ltd.`, `project-x`, `Northwind, Inc.`. The list is remembered between sessions
-(in the browser only when *Remember in this browser* is on).
+project code, go into the numbered **Custom terms** list on the Ledger tab (desktop) or in the
+ledger panel (web). Type a term in the box above the list and press `Enter`; pasting several
+lines adds each line as its own term. Double-click a term to edit it, `×` removes it. Long names
+and phrases with spaces or commas are fine: `Acme Holding Ltd.`, `project-x`, `Northwind, Inc.`.
+The list is remembered between sessions (in the browser only when *Remember in this browser*
+is on).
 
 The quickest way to add one: select it in the input, then press `Alt+M` or right-click →
 *Add to custom terms*. The input is masked again at once, and if the masked text was on the
-clipboard (auto-watch or *Copy*), the clipboard gets the new version. Editing the list and
-leaving it masks the input again too.
+clipboard (auto-watch or *Copy*), the clipboard gets the new version. Adding or removing a term
+in the list masks the input again too.
 
-- Terms apply as soon as you type them, also to auto-watch, the hotkeys and the tray menu.
+- Terms apply as soon as they are added, also to auto-watch, the hotkeys and the tray menu.
 - Spaces inside a term match any run of spaces, tabs or line breaks, so `Acme Holding` also
   finds `ACME  holding` and a name broken over two lines.
 - Matching ignores case and Turkish letters: `acme` finds `ACME` and `Acme`; `tuik` finds `TÜİK`,
@@ -472,6 +474,10 @@ To stop it starting at login, delete `~/.config/autostart/maskboard.desktop`.
 
 ## Troubleshooting
 
+- **"MaskBoard is already running":** only one copy runs at a time, because two clipboard
+  watchers would interfere. Closing the window keeps it in the tray; quit it there (or in Task
+  Manager) before starting a new version. `build_windows.bat` stops a running `MaskBoard.exe`
+  itself, since a running exe cannot be overwritten. The version is shown next to the name.
 - **The app does not start:** an error dialog appears, and the details are written to
   `maskboard-error.log` in your home folder. Sharing that file makes the problem quick to
   find.

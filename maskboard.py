@@ -44,6 +44,7 @@ def _import_pystray():
 pystray = _import_pystray()
 
 APP_NAME = "MaskBoard"
+APP_VERSION = "1.1.0"
 HOME = os.path.expanduser("~")
 STORE = os.path.join(HOME, ".maskboard.json")
 LEGACY_STORES = [os.path.join(HOME, n) for n in (".clipveil.json", ".anonim_ajan.json")]   # earlier names
@@ -1114,9 +1115,12 @@ STRINGS = {
         "out_title": "Text for the AI", "out_hint": "masked",
         "btn_mask": "Mask", "btn_restore": "Restore", "btn_clear": "Clear", "btn_copy": "Copy", "btn_ok": "OK",
         "terms_title": "Custom terms", "terms_count": "{n} terms", "terms_count_1": "1 term",
-        "terms_hint": "One per line — company, product or project names, long phrases too. Matched as whole words "
-                      "and identifier parts (ACME_Prod, AcmeUser); case, Turkish letters and extra spaces are ignored. "
-                      "Tip: select text in the input and press Alt+M or right-click.",
+        "terms_hint": "Company, product or project names; long phrases too. Matched as whole words and identifier "
+                      "parts (ACME_Prod, AcmeUser); case, Turkish letters and extra spaces are ignored. Pasting several "
+                      "lines adds each one. Double-click a term to edit it, × removes it. Tip: select text in the "
+                      "input and press Alt+M or right-click.",
+        "terms_ph": "New term — Enter adds it", "terms_add": "Add", "terms_added_n": "{n} custom terms added", "term_removed": "Removed from custom terms: {s}",
+        "terms_empty": "No custom terms yet. Type one above, or select text in the input and press Alt+M.",
         "menu_add": "Add “{s}” to custom terms", "menu_add_none": "Add selection to custom terms",
         "menu_cut": "Cut", "menu_copy": "Copy", "menu_paste": "Paste", "menu_all": "Select all",
         "term_need": "Select a word or phrase first.", "term_token": "That is already a token.",
@@ -1180,6 +1184,8 @@ STRINGS = {
         "error": "Error: {e}", "notify_masked": "🛡 Masked: {n} items", "notify_restored": "↩ Restored: {n} values",
         "missing_ui": "The UI package is missing.\n\npip install customtkinter",
         "crash_title": "MaskBoard could not start", "crash_details": "Details: {p}",
+        "already_running": "MaskBoard is already running. Open it from the tray icon, or quit it there "
+                           "before starting a new version.",
     },
     "tr": {
         "types": {"ipv4": "IPv4", "ipv6": "IPv6", "domain": "DNS", "url": "URL", "email": "E-posta", "mac": "MAC",
@@ -1203,9 +1209,13 @@ STRINGS = {
         "btn_mask": "Anonimleştir", "btn_restore": "Geri çevir", "btn_clear": "Temizle", "btn_copy": "Kopyala",
         "btn_ok": "Tamam",
         "terms_title": "Özel terimler", "terms_count": "{n} terim",
-        "terms_hint": "Her satıra bir terim — firma, ürün ya da proje adı; uzun ifadeler de olur. Tam kelime ve "
-                      "tanımlayıcı parçası olarak bulunur (ACME_Prod, AcmeUser); büyük/küçük harf, Türkçe harfler ve "
-                      "fazla boşluklar önemsizdir. İpucu: girişte metni seçip Alt+M'ye bas ya da sağ tıkla.",
+        "terms_hint": "Firma, ürün ya da proje adları; uzun ifadeler de olur. Tam kelime ve tanımlayıcı parçası "
+                      "olarak bulunur (ACME_Prod, AcmeUser); büyük/küçük harf, Türkçe harfler ve fazla boşluklar "
+                      "önemsizdir. Birden çok satır yapıştırırsan her satır ayrı terim olur. Düzenlemek için terime "
+                      "çift tıkla, × siler. İpucu: girişte metni seçip Alt+M'ye bas ya da sağ tıkla.",
+        "terms_ph": "Yeni terim — Enter ile ekle", "terms_add": "Ekle", "terms_added_n": "{n} özel terim eklendi",
+        "term_removed": "Özel terimlerden çıkarıldı: {s}",
+        "terms_empty": "Henüz özel terim yok. Yukarıya yaz ya da girişte metni seçip Alt+M'ye bas.",
         "menu_add": "“{s}” özel terimlere ekle", "menu_add_none": "Seçimi özel terimlere ekle",
         "menu_cut": "Kes", "menu_copy": "Kopyala", "menu_paste": "Yapıştır", "menu_all": "Tümünü seç",
         "term_need": "Önce bir kelime ya da ifade seç.", "term_token": "Bu zaten bir etiket.",
@@ -1268,6 +1278,8 @@ STRINGS = {
         "error": "Hata: {e}", "notify_masked": "🛡 Maskelendi: {n} öğe", "notify_restored": "↩ Geri çevrildi: {n} değer",
         "missing_ui": "Arayüz paketi eksik.\n\npip install customtkinter",
         "crash_title": "MaskBoard açılamadı", "crash_details": "Ayrıntılar: {p}",
+        "already_running": "MaskBoard zaten çalışıyor. Tepsi simgesinden açabilir ya da yeni sürümü "
+                           "başlatmadan önce oradan çıkış yapabilirsin.",
     },
 }
 LANGS = ("en", "tr")
@@ -1575,7 +1587,7 @@ def run_gui(agent):
     SEL, SEL_H = "#26324A", "#2C3A55"
 
     root = ctk.CTk(fg_color=BG)
-    root.title(APP_NAME)
+    root.title("%s %s" % (APP_NAME, APP_VERSION))
     try:
         sc = ctk.ScalingTracker.get_window_scaling(root)
         max_h = int(root.winfo_screenheight() / sc) - 90
@@ -1767,8 +1779,10 @@ def run_gui(agent):
         except Exception as ex:
             print("Logo unavailable:", ex)
     title_box = clear(header); title_box.pack(side="left", padx=(12, 0))
-    ctk.CTkLabel(title_box, text=APP_NAME, font=F(18, "bold", UI_D), text_color=TEXT, anchor="w",
-                 height=22).pack(anchor="w")
+    name_row = clear(title_box); name_row.pack(anchor="w")
+    ctk.CTkLabel(name_row, text=APP_NAME, font=F(18, "bold", UI_D), text_color=TEXT, anchor="w",
+                 height=22).pack(side="left")
+    ctk.CTkLabel(name_row, text="v" + APP_VERSION, font=F(11), text_color=FAINT, height=22).pack(side="left", padx=(8, 0))
     tx(ctk.CTkLabel(title_box, font=F(11), text_color=MUTED, anchor="w", height=16), "tagline").pack(anchor="w")
 
     def on_lang(code):
@@ -1918,7 +1932,6 @@ def run_gui(agent):
     def do_anon(note="", implicit=False):
         """implicit: re-mask nobody asked for (terms edited) — only refresh the clipboard if it still
         holds the previous masked text."""
-        sync_terms(now=True)
         prev = masked_out.get("1.0", "end-1c")
         txt = src.get("1.0", "end-1c")
         if not txt.strip(): return gui.flash(T("need_input"))
@@ -1939,7 +1952,6 @@ def run_gui(agent):
             text, enc = read_text_file(p)
         except Exception as ex:
             return gui.flash(T("file_bad", name=os.path.basename(p), e=ex), "warn")
-        sync_terms(now=True)
         opts = get_opts()
         work = (lambda: agent.mapper.anonymize(text, opts)) if kind == "mask" else (lambda: agent.mapper.restore(text))
         def done(out, n):
@@ -2042,58 +2054,91 @@ def run_gui(agent):
     btn(bar, "export", do_export, "secondary", width=100).pack(side="right", padx=(0, 8))
 
     led_row = clear(pd); led_row.pack(fill="both", expand=True)
+    # custom terms: a numbered list (one row per term) with an entry to add new ones
     terms_card = card(led_row); terms_card.pack(side="right", fill="y", padx=(12, 0))
     th = clear(terms_card); th.pack(fill="x", padx=16, pady=(12, 8))
     tx(ctk.CTkLabel(th, font=F(12, "bold"), text_color=TEXT, anchor="w"), "terms_title").pack(side="left")
     terms_count = ctk.CTkLabel(th, text="", font=F(11), text_color=FAINT); terms_count.pack(side="right")
-    terms_box = textbox(terms_card); terms_box.configure(width=270)
-    terms_box.pack(fill="both", expand=True, padx=12)
+    MONO11, MONO12 = ctk.CTkFont(family=MONO, size=11), ctk.CTkFont(family=MONO, size=12)
+    add_row = clear(terms_card); add_row.pack(fill="x", padx=12, pady=(0, 8))
+    term_entry = ctk.CTkEntry(add_row, height=32, corner_radius=8, border_width=1, border_color=BORDER, fg_color=INK,
+                              text_color=TEXT, font=MONO12, placeholder_text=T("terms_ph"),
+                              placeholder_text_color=FAINT)
+    tx(term_entry, "terms_ph", "placeholder_text").pack(side="left", fill="x", expand=True)
+    btn(add_row, "terms_add", lambda: add_from_entry(), "outline", width=64, height=32).pack(side="right", padx=(6, 0))
+    terms_view = ctk.CTkScrollableFrame(terms_card, width=262, fg_color=INK, corner_radius=10, border_width=1,
+                                        border_color=BORDER, scrollbar_button_color=BORDER,
+                                        scrollbar_button_hover_color=BORDER2)
+    terms_view.pack(fill="both", expand=True, padx=12)
     terms_hint = tx(ctk.CTkLabel(terms_card, font=F(11), text_color=FAINT, justify="left", anchor="w",
                                  wraplength=262), "terms_hint")
     terms_hint.pack(fill="x", padx=16, pady=(8, 12))
-    set_text(terms_box, "\n".join(agent.mapper.custom_terms))
 
-    def terms_list(): return norm_terms(terms_box.get("1.0", "end-1c").split("\n"))
     def show_terms_count(): terms_count.configure(text=T("terms_count", n=len(agent.mapper.custom_terms)))
-    retranslate.append(show_terms_count)
-    terms_job = [None]
-    def sync_terms(*_, now=False, remask=False):
-        def apply():
-            terms_job[0] = None
-            changed = terms_list() != agent.mapper.custom_terms
-            if changed: agent.mapper.set_custom(terms_list())
-            show_terms_count()
-            if changed and remask and src.get("1.0", "end-1c").strip() and masked_out.get("1.0", "end-1c").strip():
-                do_anon(T("terms_updated") + " · ", implicit=True)
-        if terms_job[0]: root.after_cancel(terms_job[0]); terms_job[0] = None
-        if now: apply()
-        else: terms_job[0] = root.after(300, apply)
-    terms_box.bind("<KeyRelease>", sync_terms, add=True)
-    terms_box.bind("<FocusOut>", lambda e: sync_terms(now=True, remask=True), add=True)
+    def render_terms():
+        for w in terms_view.winfo_children(): w.destroy()
+        terms = agent.mapper.custom_terms
+        if not terms:
+            ctk.CTkLabel(terms_view, text=T("terms_empty"), font=F(11), text_color=FAINT, wraplength=230,
+                         justify="left", anchor="w").pack(fill="x", padx=8, pady=10)
+        for i, term in enumerate(terms, 1):
+            row = ctk.CTkFrame(terms_view, fg_color=(SURF2 if i % 2 else "transparent"), corner_radius=7)
+            row.pack(fill="x", pady=1)
+            ctk.CTkLabel(row, text="%d." % i, width=28, anchor="ne", font=MONO11, text_color=FAINT).pack(
+                side="left", anchor="n", padx=(2, 6), pady=(5, 4))
+            x = ctk.CTkButton(row, text="×", width=24, height=22, corner_radius=6, font=F(13, "bold"),
+                              fg_color="transparent", hover_color=CORAL_BG, text_color=FAINT,
+                              command=lambda t=term: remove_term(t))
+            x.pack(side="right", anchor="n", padx=4, pady=3)
+            lbl = ctk.CTkLabel(row, text=term, anchor="w", justify="left", wraplength=170, font=MONO12,
+                               text_color=TEXT)
+            lbl.pack(side="left", fill="x", expand=True, pady=4)
+            lbl.bind("<Double-Button-1>", lambda e, t=term: edit_term(t))
+        show_terms_count()
+    retranslate.append(render_terms)
+
+    def merged(raw):
+        """Current terms plus the new lines of raw (several lines = several terms). Returns (terms, added)."""
+        cur = list(agent.mapper.custom_terms); known = {t.casefold() for t in cur}; added = []
+        for t in norm_terms(str(raw).splitlines()):
+            if is_token(t) or t.casefold() in known: continue
+            cur.append(t); known.add(t.casefold()); added.append(t)
+        return cur, added
+    def remask(note, implicit):
+        if src.get("1.0", "end-1c").strip() and (not implicit or masked_out.get("1.0", "end-1c").strip()):
+            show_page("tab_mask") if not implicit else None
+            do_anon(note + " · ", implicit=implicit)
+        else:
+            gui.flash(note, "ok")
+    def set_terms(terms, note, implicit=True):
+        agent.mapper.set_custom(terms); render_terms()
+        if note: remask(note, implicit)
+    def add_from_entry():
+        cur, added = merged(term_entry.get())
+        term_entry.delete(0, "end")
+        if added: set_terms(cur, T("term_added", s=added[0]) if len(added) == 1 else T("terms_added_n", n=len(added)))
+    def remove_term(t):
+        set_terms([x for x in agent.mapper.custom_terms if x != t], T("term_removed", s=t))
+    def edit_term(t):
+        set_terms([x for x in agent.mapper.custom_terms if x != t], None)
+        term_entry.delete(0, "end"); term_entry.insert(0, t); term_entry.focus_set()
+    term_entry.bind("<Return>", lambda e: add_from_entry())
+    render_terms()
 
     def add_selection(tb):
         term = norm_term(selection(tb))
         if not term: return gui.flash(T("term_need"), "warn")
         if is_token(term): return gui.flash(T("term_token"), "warn")
-        sync_terms(now=True)
-        known = {t.casefold() for t in agent.mapper.custom_terms}
-        if term.casefold() in known:
-            note = T("term_exists", s=term)
-        else:
-            cur = terms_box.get("1.0", "end-1c")
-            terms_box.insert("end", ("\n" if cur and not cur.endswith("\n") else "") + term)
-            sync_terms(now=True)
-            note = T("term_added", s=term)
-        if src.get("1.0", "end-1c").strip():
-            show_page("tab_mask"); do_anon(note + " · ")
-        else:
-            gui.flash(note, "ok")
+        cur, added = merged(term)
+        if added:
+            agent.mapper.set_custom(cur); render_terms()
+        remask(T("term_added", s=term) if added else T("term_exists", s=term), implicit=False)
         return "break"
     for tb in (src, masked_out):
         context_menu(tb, editable=(tb is src), add_term=lambda tb=tb: add_selection(tb))
         for ev in ("<Alt-m>", "<Alt-M>"):
             tb.bind(ev, lambda e, tb=tb: add_selection(tb), add=True)
-    context_menu(reply, editable=True); context_menu(restored_out); context_menu(terms_box, editable=True)
+    context_menu(reply, editable=True); context_menu(restored_out)
 
     led_card = card(led_row); led_card.pack(side="left", fill="both", expand=True)
     style = ttk.Style(root)
@@ -2248,6 +2293,28 @@ def run_gui(agent):
     root.mainloop(); agent.stop()
 
 
+_INSTANCE = []
+
+def _single_instance():
+    """False when another MaskBoard is already running (two clipboard watchers would fight)."""
+    try:
+        if sys.platform == "win32":
+            import ctypes
+            k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+            h = k32.CreateMutexW(None, False, "Local\\MaskBoard.SingleInstance")
+            _INSTANCE.append(h)
+            return ctypes.get_last_error() != 183                         # ERROR_ALREADY_EXISTS
+        import fcntl
+        f = open(os.path.join(HOME, ".maskboard.lock"), "w")
+        fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        _INSTANCE.append(f)
+        return True
+    except (BlockingIOError, PermissionError):
+        return False
+    except Exception:
+        return True
+
+
 def _migrate_store():
     """Move a ledger written under an earlier name (ClipVeil, Anonim Ajan) to its new place."""
     for old in LEGACY_STORES:
@@ -2267,6 +2334,15 @@ def main():
     _migrate_store()
     agent = Agent()
     set_lang(agent.mapper.settings.get("lang") or detect_lang())
+    if not _single_instance():
+        print(T("already_running"))
+        try:
+            import tkinter as tk
+            from tkinter import messagebox
+            r = tk.Tk(); r.withdraw(); messagebox.showinfo(APP_NAME, T("already_running")); r.destroy()
+        except Exception:
+            pass
+        return
     try:
         run_gui(agent)
     except SystemExit:
