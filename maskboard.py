@@ -12,7 +12,7 @@ Hotkeys (needs pynput): Ctrl+Alt+A mask clipboard · Ctrl+Alt+R restore clipboar
 Ctrl+Alt+T toggle auto-watch.
 """
 
-import ipaddress, json, locale, os, re, sys, threading, time, unicodedata
+import bisect, functools, ipaddress, json, locale, os, re, sys, threading, time, unicodedata
 
 try:
     import pyperclip
@@ -44,7 +44,7 @@ def _import_pystray():
 pystray = _import_pystray()
 
 APP_NAME = "MaskBoard"
-APP_VERSION = "1.3.0"
+APP_VERSION = "1.3.1"
 HOME = os.path.expanduser("~")
 STORE = os.path.join(HOME, ".maskboard.json")
 LEGACY_STORES = [os.path.join(HOME, n) for n in (".clipveil.json", ".anonim_ajan.json")]   # earlier names
@@ -153,7 +153,8 @@ _DATE_BODY = "|".join([
     _D + r"[ \-/.]?(?:" + _MON + r")\.?[ \-/.,]*" + _Y,              # 01 Oct 2026
     r"(?:" + _MON + r")\.?[ \-]" + _D + r",?[ \-]" + _Y,              # Oct 1, 2026
 ])
-DATE_RE = re.compile(r"(?<!\d)(?<!\d[.\-/])(?:" + _DATE_BODY + r")(?!\d|[.\-/]\d)", re.I)
+# The leading look-ahead only skips positions where no date can start (speed; same matches).
+DATE_RE = re.compile(r"(?=[0-9a-zşŞ])(?<!\d)(?<!\d[.\-/])(?:" + _DATE_BODY + r")(?!\d|[.\-/]\d)", re.I)
 
 # ---- secrets ----
 _PW_CORE = (r"passwd|password|passwort|passphrase|pwd|kennwort|contraseña|contrasena|motdepasse|"
@@ -346,7 +347,8 @@ HOST_BLOCK = set(["md5","md2","md4","sha1","sha2","sha3","sha224","sha256","sha3
     "el8","el9","fc38","fc39","fc40","win10","win11","dotnet6","dotnet8","node18","node20","node22"])
 KW_RE = re.compile(r"\b(?P<k>hostname|nodename|node|computername|computer|dnsname|host|cn)\b\s*[:=]\s*[\"']?"
                    r"(?P<v>[A-Za-z][A-Za-z0-9\-]{1,62})[\"']?", re.I)
-TOK_RE = re.compile(r"\b[A-Za-z][A-Za-z0-9]*(?:-[A-Za-z0-9]+)*\b")
+# Host candidates need a digit; the look-ahead skips digit-free words early (same results, faster).
+TOK_RE = re.compile(r"\b(?=[A-Za-z0-9\-]*\d)[A-Za-z][A-Za-z0-9]*(?:-[A-Za-z0-9]+)*\b")
 # Log noise that looks like a host: thread-12, pool-3, port8080 …
 HOST_NOISE = {"thread","threads","pool","worker","workers","task","tasks","exec","executor",
     "nio","ajp","main","job","batch","session","sess","req","request","conn","connection",
@@ -556,9 +558,9 @@ def norm_term(t):
     return re.sub(_TERM_SPACE, " ", t or "").strip(" ")
 
 def norm_terms(terms):
-    out = []
+    out, seen = [], set()
     for t in map(norm_term, terms or []):
-        if t and t not in out: out.append(t)
+        if t and t not in seen: seen.add(t); out.append(t)
     return out
 
 def norm_lists(lists):
@@ -571,6 +573,7 @@ def norm_lists(lists):
         out[key]["terms"] = norm_terms(out[key]["terms"] + list(l.get("terms") or []))
     return list(out.values())
 
+@functools.lru_cache(maxsize=8192)
 def _term_re(term):
     out = []
     for ch in term:
@@ -584,6 +587,75 @@ def _term_re(term):
         else:
             out.append(re.escape(ch))
     return re.compile("".join(out))
+
+# Fast path for custom terms made of ASCII and Turkish letters: fold case and Turkish letters one
+# character for one character, then a plain substring search finds exactly what the term's regex
+# would find. Terms with spaces (which match any run of whitespace) keep the regex, after a
+# substring pre-check on the text with whitespace runs collapsed.
+_FOLD = {ord(ch): g[0].lower() for g in ("iıİI", "uüUÜ", "oöOÖ", "cçCÇ", "sşSŞ", "gğGĞ") for ch in g}
+_FOLD.update({ord(c): c.lower() for c in "ABCDEFGHIJKLMNOPQRSTUVWXYZ" if ord(c) not in _FOLD})
+_FOLD.update({ord(c): " " for c in "\t\r\n\u00a0"})
+_FOLDABLE = re.compile(r"[\x20-\x7eıİüÜöÖçÇşŞğĞ]+")
+
+def _fold_text(text):
+    return text.translate(_FOLD)
+
+@functools.lru_cache(maxsize=8192)
+def _fold_term(term):
+    return term.translate(_FOLD) if _FOLDABLE.fullmatch(term) else None
+
+def _find_all(hay, needle):
+    i = hay.find(needle)
+    while i >= 0:
+        yield i, i + len(needle)
+        i = hay.find(needle, i + len(needle))
+
+def _span_index(spans):
+    """hit(s, e): does [s, e) overlap any of the spans? Spans are merged once, then binary-searched."""
+    merged = []
+    for a, b in sorted(spans):
+        if merged and a < merged[-1][1]: merged[-1][1] = max(merged[-1][1], b)
+        else: merged.append([a, b])
+    starts = [a for a, _ in merged]; ends = [b for _, b in merged]
+    def hit(s, e):
+        j = bisect.bisect_right(ends, s)
+        return j < len(merged) and starts[j] < e
+    return hit
+
+REMOTE_MIN = 200_000       # characters: from this size the desktop app detects in a worker process
+
+def collect_snapshot(snap, text, opts):
+    """Detection on a snapshot of a ledger (runs in the worker process)."""
+    m = Mapper(store=None)
+    m.custom_terms, m.custom_lists = snap["custom_terms"], snap["custom_lists"]
+    m._extra = set(snap["extra"]); m.entries = snap["entries"]
+    return m._collect(text, opts)
+
+_POOL = [None]
+
+def process_collector(snap, text, opts):
+    """Run collect_snapshot in one long-lived worker process (started on first use)."""
+    if _POOL[0] is None:
+        import concurrent.futures, multiprocessing
+        _POOL[0] = concurrent.futures.ProcessPoolExecutor(1, mp_context=multiprocessing.get_context("spawn"))
+    try:
+        return _POOL[0].submit(collect_snapshot, snap, text, opts).result(timeout=900)
+    except Exception:
+        pool, _POOL[0] = _POOL[0], None             # broken or stuck: start a fresh one next time
+        try: pool.shutdown(wait=False, cancel_futures=True)
+        except Exception: pass
+        raise
+
+def shutdown_pool():
+    """Stop the worker at exit; a job still running is abandoned, not waited for."""
+    pool, _POOL[0] = _POOL[0], None
+    if pool:
+        procs = list((getattr(pool, "_processes", None) or {}).values())
+        try: pool.shutdown(wait=False, cancel_futures=True)
+        except Exception: pass
+        for p in procs:
+            try: p.terminate()
+            except Exception: pass
 
 def _part_break(a, b):
     """Is there an identifier-part boundary between characters a and b (snake_case, camelCase, letter|digit)?"""
@@ -613,6 +685,7 @@ class Mapper:
         self._reset()
         self.custom_terms = []
         self.custom_lists = []     # [{"prefix": "vmachine", "terms": [...]}]
+        self.collector = None      # optional: f(snapshot, text, opts) → matches, for large texts
         self.settings = {}
         self.load()
 
@@ -862,9 +935,15 @@ class Mapper:
                 add(s, s + len(cm.group("p")), cm.group("p"), "project", prop=True)
             elif not is_token(repo) and len(repo) >= 3:
                 add(s, s + len(repo), repo, "project", prop=True)
+        def lines_from(pos):
+            """Lines from pos on, with their start, until the end of the text (no copy of the rest)."""
+            while pos <= len(text):
+                nl = text.find("\n", pos)
+                end = len(text) if nl < 0 else nl
+                yield pos, text[pos:end]
+                pos = end + 1
         for h in DOCKER_PS_HDR.finditer(text):
-            pos = h.end() + 1
-            for line in text[pos:].split("\n"):
+            for pos, line in lines_from(h.end() + 1):
                 row = re.match(r"([0-9a-f]{12})\s+(?P<img>\S+)", line)
                 if not row: break
                 last = re.search(r"(\S+)\s*$", line)
@@ -876,20 +955,29 @@ class Mapper:
                     n = nm.group(0)
                     if public and n == repo.split("/")[-1]: continue     # open-webui from …/open-webui
                     add_container(pos + last.start(1) + nm.start(), n)
-                pos += len(line) + 1
         for h in DOCKER_IMAGES_HDR.finditer(text):
-            pos = h.end() + 1
-            for line in text[pos:].split("\n"):
+            for pos, line in lines_from(h.end() + 1):
                 row = re.match(r"(?P<repo>\S+)\s+\S+\s+[0-9a-f]{12}\s", line)
                 if not row: break
                 repo, public, local = image_parts(row.group("repo"))
                 if local and repo != "<none>": add_local_image(pos, repo)
-                pos += len(line) + 1
 
         # 8) custom terms (case-insensitive) and national IDs
+        folded = collapsed = None
         for term, prefix in self._term_prefixes():
-            for m in _term_re(term).finditer(text):
-                span = _custom_span(text, m.start(), m.end())
+            ft = _fold_term(term)
+            if ft is None:
+                hits = (m.span() for m in _term_re(term).finditer(text))
+            else:
+                if folded is None: folded = _fold_text(text)
+                if " " in ft:
+                    if collapsed is None: collapsed = re.sub(" {2,}", " ", folded)
+                    if ft not in collapsed: continue
+                    hits = (m.span() for m in _term_re(term).finditer(text))
+                else:
+                    hits = _find_all(folded, ft)
+            for a, b in hits:
+                span = _custom_span(text, a, b)
                 if span: add(span[0], span[1], text[span[0]:span[1]], "custom", prefix)
         for m in NATID_RE.finditer(text):
             if _natid_ok(m.group(0)): add(m.start(), m.end(), m.group(0), "natid")
@@ -970,9 +1058,13 @@ class Mapper:
             for m in _spread_re(v).finditer(text):
                 add(m.start(), m.end(), v, typ, p, prio=P_SPREAD)
 
-        found = [f for f in found if not any(f[0] < pe and ps < f[1] for ps, pe in protected)]
+        if protected:
+            hit = _span_index(protected)
+            found = [f for f in found if not hit(f[0], f[1])]
         secret_spans = [(f[0], f[1]) for f in found if f[3] == "secret"]
-        found = [f for f in found if f[3] != "url" or not any(f[0] < se and ss < f[1] for ss, se in secret_spans)]
+        if secret_spans:
+            hit = _span_index(secret_spans)
+            found = [f for f in found if f[3] != "url" or not hit(f[0], f[1])]
 
         found.sort(key=lambda x: (x[0], -x[5], -(x[1] - x[0])))
         chosen = []; last_end = -1
@@ -985,14 +1077,52 @@ class Mapper:
 
     # ---- public API ----
     def anonymize(self, text, opts=None):
+        matches = self._matches(text, opts)
         with self.lock:
-            matches = self._collect(text, opts)
-            out = []; i = 0
-            for s, e, v, t, p, pr in matches:
-                out.append(text[i:s]); out.append(self._get_fake(v, t, p, pr)); i = e
-            out.append(text[i:])
-            if matches: self.save()
-            return "".join(out), len(matches)
+            return self._apply(text, matches)
+
+    def _matches(self, text, opts):
+        """Detection for a text. Large texts go to self.collector (a worker process in the desktop
+        app, so the window never waits for Python's interpreter lock); it gets a snapshot of what
+        detection needs, and the ledger is only changed here, afterwards."""
+        if self.collector and len(text) >= REMOTE_MIN:
+            with self.lock: snap = self._snapshot()
+            try:
+                return self.collector(snap, text, opts)
+            except Exception as ex:
+                print("Worker failed, masking here:", ex)
+        with self.lock:
+            return self._collect(text, opts)
+
+    def _snapshot(self):
+        return {"custom_terms": list(self.custom_terms), "custom_lists": [dict(l) for l in self.custom_lists],
+                "extra": sorted(self._extra),
+                "entries": [{"real": e["real"], "fake": e["fake"], "type": e["type"], "prop": e.get("prop", False)}
+                            for e in self.entries
+                            if not e.get("secret") and (e.get("prop") or e["type"] in ("domain", "url"))]}
+
+    def _apply(self, text, matches):
+        out = []; i = 0
+        for s, e, v, t, p, pr in matches:
+            out.append(text[i:s]); out.append(self._get_fake(v, t, p, pr)); i = e
+        out.append(text[i:])
+        if matches: self.save()
+        return "".join(out), len(matches)
+
+    def process(self, text, opts=None, smart=True):
+        """A copied text in one pass: ('restore'|'anon', output, count). Smart mode restores when
+        known tokens dominate (as classify decides) without scanning the text twice."""
+        if smart:
+            with self.lock:
+                known = sum(1 for m in self.token_re().finditer(text) if m.group(0) in self.tok)
+            if known:
+                matches = self._matches(text, opts)
+                if known >= len(matches):
+                    out, n = self.restore(text)
+                    return "restore", out, n
+                with self.lock:
+                    return ("anon",) + self._apply(text, matches)
+        return ("anon",) + self.anonymize(text, opts)
 
     def classify(self, text, opts=None):
         """('restore'|'anon', known tokens, new sensitive values): restore only if known tokens dominate."""
@@ -1197,6 +1327,7 @@ def write_text_file(path, text, encoding="utf-8"):
     return encoding
 
 HIGHLIGHT_MAX = 600_000    # characters: larger outputs are shown without token colouring
+AUTO_MAX = 3_000_000       # characters: auto-watch leaves larger copies alone (Open file handles them)
 BUSY_MIN = 150_000         # characters: larger texts are processed in the background
 
 def human_size(chars):
@@ -1255,14 +1386,19 @@ STRINGS = {
         "terms_hint": "CUSTOM is the default list. For your own names (VMs, servers, IP addresses) make a list "
                       "with + List: its name becomes the token, e.g. vmachine_1, vmachine_2. Import fills the "
                       "selected list from a .txt (one per line) or .csv (first column). Terms match whole words and "
-                      "identifier parts, ignoring case, Turkish letters and extra spaces. Double-click to edit, × "
-                      "removes. Alt+M in the input adds to the selected list.",
+                      "identifier parts, ignoring case, Turkish letters and extra spaces. Double-click a term to edit "
+                      "it; Delete or right-click removes it. Alt+M in the input adds to the selected list.",
         "list_new": "+ List", "list_new_title": "New list",
         "list_new_q": "Name of the list — it becomes the token name:\nvmachine → vmachine_1, vmachine_2 …\n\n"
                       "Letters A–Z, digits and _, starting with a letter.",
         "list_bad": "That name can't be used: letters A–Z, digits and _, starting with a letter.",
         "list_created": "List {p} created — its terms become {p}_1, {p}_2 …",
-        "list_import": "Import list…", "list_delete": "Delete list",
+        "list_import": "Import…", "list_delete": "Delete", "list_rename": "Rename",
+        "list_rename_q": "New name for the list {p}:\n\nIts terms get the new token name from the next mask on; "
+                         "tokens already given out keep restoring. An existing list's name merges the two.",
+        "list_renamed": "List {old} renamed to {new}", "term_edit": "Edit", "term_remove_sel": "Remove ({n})",
+        "terms_removed_n": "{n} terms removed", "rows_cap": " · newest {k} shown, search to narrow",
+        "too_big_auto": "Copy of {size} left alone — too large for auto-watch. Use Open file on the Mask tab.",
         "list_delete_q": "Delete the list {p}?\n\nTokens it already gave out keep restoring.",
         "list_deleted": "List {p} deleted", "list_tokens": "Tokens: {p}_1, {p}_2 …",
         "list_imported": "{n} terms imported into {p}", "list_imported_1": "1 term imported into {p}",
@@ -1361,13 +1497,20 @@ STRINGS = {
                       "aç: adı etiket adı olur, örn. vmachine_1, vmachine_2. İçe aktar seçili listeyi .txt (her "
                       "satıra bir terim) ya da .csv (ilk sütun) dosyasından doldurur. Terimler tam kelime ve "
                       "tanımlayıcı parçası olarak bulunur; büyük/küçük harf, Türkçe harfler ve fazla boşluklar "
-                      "önemsizdir. Çift tık düzenler, × siler. Girişte Alt+M seçili listeye ekler.",
+                      "önemsizdir. Terime çift tıkla düzenle; Delete tuşu ya da sağ tık siler. Girişte Alt+M seçili "
+                      "listeye ekler.",
         "list_new": "+ Liste", "list_new_title": "Yeni liste",
         "list_new_q": "Listenin adı — etiket adı olur:\nvmachine → vmachine_1, vmachine_2 …\n\n"
                       "A–Z harfleri, rakam ve _; harfle başlamalı.",
         "list_bad": "Bu ad kullanılamaz: A–Z harfleri, rakam ve _; harfle başlamalı.",
         "list_created": "{p} listesi oluşturuldu — terimleri {p}_1, {p}_2 … olur",
-        "list_import": "Liste içe aktar…", "list_delete": "Listeyi sil",
+        "list_import": "İçe aktar…", "list_delete": "Sil", "list_rename": "Adı değiştir",
+        "list_rename_q": "{p} listesinin yeni adı:\n\nTerimleri bir sonraki maskelemeden itibaren yeni etiket adını "
+                         "alır; daha önce verilen etiketler geri çevrilmeye devam eder. Var olan bir listenin adını "
+                         "yazarsan ikisi birleşir.",
+        "list_renamed": "{old} listesinin adı {new} oldu", "term_edit": "Düzenle", "term_remove_sel": "Sil ({n})",
+        "terms_removed_n": "{n} terim silindi", "rows_cap": " · en yeni {k} gösteriliyor, daraltmak için ara",
+        "too_big_auto": "{size} boyutundaki kopya atlandı — oto-izle için çok büyük. Anonimleştir sekmesinde Dosya aç'ı kullan.",
         "list_delete_q": "{p} listesi silinsin mi?\n\nDaha önce verdiği etiketler geri çevrilmeye devam eder.",
         "list_deleted": "{p} listesi silindi", "list_tokens": "Etiketler: {p}_1, {p}_2 …",
         "list_imported": "{p} listesine {n} terim aktarıldı",
@@ -1585,10 +1728,7 @@ class Agent:
 
     def handle_copy(self, cur):
         """Process a new copy. Returns (kind, output, count)."""
-        opts = self.get_opts()
-        kind = self.mapper.classify(cur, opts)[0] if self.mode == "smart" else "anon"
-        out, n = self.mapper.restore(cur) if kind == "restore" else self.mapper.anonymize(cur, opts)
-        return kind, out, n
+        return self.mapper.process(cur, self.get_opts(), smart=self.mode == "smart")
 
     def _poll(self):
         """Clipboard text if there was a new copy since the last poll, else None."""
@@ -1627,6 +1767,8 @@ class Agent:
         while self.running:
             if pyperclip:
                 cur = self._poll()
+                if cur is not None and self.auto and len(cur) > AUTO_MAX:
+                    self._flash(T("too_big_auto", size=human_size(len(cur)))); continue
                 if cur is not None and self.auto and _norm(cur):
                     try:
                         kind, out, n = self.handle_copy(cur)
@@ -1846,11 +1988,7 @@ def run_gui(agent):
         text = tb.get("1.0", "end-1c")
         spans = syntax_spans(text)
         if not spans: return
-        starts = [0] + [i + 1 for i, ch in enumerate(text) if ch == "\n"]
-        from bisect import bisect_right
-        def idx(o):
-            ln = bisect_right(starts, o) - 1
-            return "%d.%d" % (ln + 1, o - starts[ln])
+        idx = text_index(text)
         for a, b, kind in spans:
             tb.tag_add("syn_" + kind, idx(a), idx(b))
         for tag in ("fake", "real", "sel"):
@@ -1860,12 +1998,21 @@ def run_gui(agent):
     def set_text(tb, s):
         tb.delete("1.0", "end"); tb.insert("1.0", s); colorize(tb)
 
+    def text_index(text):
+        """Character offset → Tk "line.col" (computed once per text, then a binary search)."""
+        starts = [0] + [m.end() for m in re.finditer("\n", text)]
+        def idx(o):
+            ln = bisect.bisect_right(starts, o) - 1
+            return "%d.%d" % (ln + 1, o - starts[ln])
+        return idx
+
     def show_fakes(tb, text):
         text = text.replace("\r\n", "\n")
         set_text(tb, text)
         if len(text) > HIGHLIGHT_MAX: return
+        idx = text_index(text)
         for m in agent.mapper.token_re().finditer(text):
-            tb.tag_add("fake", "1.0+%dc" % m.start(), "1.0+%dc" % m.end())
+            tb.tag_add("fake", idx(m.start()), idx(m.end()))
 
     def show_restored(tb, text):
         """Restore with markers, then highlight exactly the restored spans."""
@@ -1875,10 +2022,12 @@ def run_gui(agent):
             if part.startswith("\x00"):
                 part = part[1:-1]; spans.append((pos, pos + len(part)))
             plain.append(part); pos += len(part)
-        set_text(tb, "".join(plain))
+        text = "".join(plain)
+        set_text(tb, text)
+        idx = text_index(text)
         for s, e in (spans if pos <= HIGHLIGHT_MAX else []):
-            tb.tag_add("real", "1.0+%dc" % s, "1.0+%dc" % e)
-        return "".join(plain), n
+            tb.tag_add("real", idx(s), idx(e))
+        return text, n
 
     def show_hotkeys(*_):
         win = ctk.CTkToplevel(root, fg_color=BG)
@@ -1917,17 +2066,28 @@ def run_gui(agent):
         except Exception:
             return ""
 
+    job_state = {"busy": False, "next": None}
     def busy_run(work, done, size):
-        """Run work() in the background for large texts so the window stays responsive."""
+        """Run work() in the background for large texts so the window stays responsive. While a job
+        runs, a new request waits; only the latest waiting one runs afterwards."""
+        if job_state["busy"]:
+            job_state["next"] = (work, done, size); return
         if size < BUSY_MIN:
             return done(*work())
+        job_state["busy"] = True
         gui.flash(T("busy", size=human_size(size)))
         root.configure(cursor="watch")
+        def finish(fn):
+            job_state["busy"] = False; root.configure(cursor="")
+            try: fn()
+            finally:
+                nxt, job_state["next"] = job_state["next"], None
+                if nxt: busy_run(*nxt)
         def job():
             try:
-                res = work(); root.after(0, lambda: (root.configure(cursor=""), done(*res)))
+                res = work(); root.after(0, lambda: finish(lambda: done(*res)))
             except Exception as ex:
-                root.after(0, lambda: (root.configure(cursor=""), gui.flash(T("error", e=ex), "warn")))
+                root.after(0, lambda: finish(lambda: gui.flash(T("error", e=ex), "warn")))
         threading.Thread(target=job, daemon=True).start()
 
     def context_menu(tb, editable=False, add_term=None):
@@ -2046,6 +2206,7 @@ def run_gui(agent):
         if tabs.get() != T(key): tabs.set(T(key))
         if key == "tab_mask": cats_btn.pack(side="right")
         else: cats_btn.pack_forget()
+        if key == "tab_ledger": gui.refresh()
 
     def io_card(master, title_key, hint_key):
         c = card(master)
@@ -2250,7 +2411,7 @@ def run_gui(agent):
     def do_clear():
         if not agent.mapper.entries: return gui.flash(T("ledger_empty_already"))
         if messagebox.askyesno(T("reset_title"), T("reset_q"), parent=root):
-            agent.mapper.clear(); gui.refresh(); gui.flash(T("reset_done"))
+            agent.mapper.clear(); tree_key[0] = None; gui.refresh(); gui.flash(T("reset_done"))
     btn(bar, "reset", do_clear, "danger", width=90).pack(side="right")
     btn(bar, "import", do_import, "secondary", width=100).pack(side="right", padx=(0, 8))
     btn(bar, "export", do_export, "secondary", width=100).pack(side="right", padx=(0, 8))
@@ -2272,9 +2433,11 @@ def run_gui(agent):
     list_menu.pack(side="left", fill="x", expand=True)
     btn(list_row, "list_new", lambda: new_list(), "outline", width=74, height=30).pack(side="right", padx=(6, 0))
     tool_row = clear(terms_card); tool_row.pack(fill="x", padx=12, pady=(0, 4))
-    btn(tool_row, "list_import", lambda: import_list(), "secondary", width=128, height=28, size=11).pack(side="left")
-    del_btn = btn(tool_row, "list_delete", lambda: delete_list(), "danger", width=96, height=28, size=11)
+    btn(tool_row, "list_import", lambda: import_list(), "secondary", width=92, height=28, size=11).pack(side="left")
+    del_btn = btn(tool_row, "list_delete", lambda: delete_list(), "danger", width=70, height=28, size=11)
     del_btn.pack(side="right")
+    ren_btn = btn(tool_row, "list_rename", lambda: rename_list(), "secondary", width=84, height=28, size=11)
+    ren_btn.pack(side="right", padx=(0, 6))
     token_hint = ctk.CTkLabel(terms_card, text="", font=MONO11, text_color=FAINT, anchor="w", height=20)
     token_hint.pack(fill="x", padx=16, pady=(0, 4))
     add_row = clear(terms_card); add_row.pack(fill="x", padx=12, pady=(0, 8))
@@ -2283,10 +2446,16 @@ def run_gui(agent):
                               placeholder_text_color=FAINT)
     tx(term_entry, "terms_ph", "placeholder_text").pack(side="left", fill="x", expand=True)
     btn(add_row, "terms_add", lambda: add_from_entry(), "outline", width=64, height=32).pack(side="right", padx=(6, 0))
-    terms_view = ctk.CTkScrollableFrame(terms_card, width=262, fg_color=INK, corner_radius=10, border_width=1,
-                                        border_color=BORDER, scrollbar_button_color=BORDER,
-                                        scrollbar_button_hover_color=BORDER2)
-    terms_view.pack(fill="both", expand=True, padx=12)
+    # a plain Treeview: thousands of terms render instantly (one widget per row did not)
+    terms_box = ctk.CTkFrame(terms_card, fg_color=INK, corner_radius=10, border_width=1, border_color=BORDER, width=262)
+    terms_box.pack(fill="both", expand=True, padx=12)
+    terms_tree = ttk.Treeview(terms_box, columns=("n", "term"), show="", style="Terms.Treeview", selectmode="extended")
+    terms_tree.column("n", width=44, anchor="e", stretch=False); terms_tree.column("term", width=200, anchor="w")
+    terms_tree.tag_configure("odd", background=SURF2)
+    tsb = ctk.CTkScrollbar(terms_box, command=terms_tree.yview, button_color=BORDER, button_hover_color=BORDER2)
+    terms_tree.configure(yscrollcommand=tsb.set)
+    tsb.pack(side="right", fill="y", padx=(0, 4), pady=6); terms_tree.pack(side="left", fill="both", expand=True, padx=(6, 0), pady=6)
+    terms_empty = ctk.CTkLabel(terms_box, text="", font=F(11), text_color=FAINT, wraplength=220, justify="left")
     terms_hint = tx(ctk.CTkLabel(terms_card, font=F(11), text_color=FAINT, justify="left", anchor="w",
                                  wraplength=262), "terms_hint")
     terms_hint.pack(fill="x", padx=16, pady=(8, 12))
@@ -2303,30 +2472,23 @@ def run_gui(agent):
         if cur_list[0] not in names: cur_list[0] = DEFAULT
         list_menu.configure(values=names); list_menu.set(cur_list[0])
         del_btn.configure(state="normal" if cur_list[0] != DEFAULT else "disabled")
+        ren_btn.configure(state="normal" if cur_list[0] != DEFAULT else "disabled")
         token_hint.configure(text=T("list_tokens", p=cur_list[0]))
     def select_list(name):
         cur_list[0] = name; render_terms()
     def render_terms():
         refresh_lists()
-        for w in terms_view.winfo_children(): w.destroy()
+        terms_tree.delete(*terms_tree.get_children())
         terms = terms_of(cur_list[0])
-        if not terms:
-            ctk.CTkLabel(terms_view, text=T("terms_empty"), font=F(11), text_color=FAINT, wraplength=230,
-                         justify="left", anchor="w").pack(fill="x", padx=8, pady=10)
         for i, term in enumerate(terms, 1):
-            row = ctk.CTkFrame(terms_view, fg_color=(SURF2 if i % 2 else "transparent"), corner_radius=7)
-            row.pack(fill="x", pady=1)
-            ctk.CTkLabel(row, text="%d." % i, width=28, anchor="ne", font=MONO11, text_color=FAINT).pack(
-                side="left", anchor="n", padx=(2, 6), pady=(5, 4))
-            x = ctk.CTkButton(row, text="×", width=24, height=22, corner_radius=6, font=F(13, "bold"),
-                              fg_color="transparent", hover_color=CORAL_BG, text_color=FAINT,
-                              command=lambda t=term: remove_term(t))
-            x.pack(side="right", anchor="n", padx=4, pady=3)
-            lbl = ctk.CTkLabel(row, text=term, anchor="w", justify="left", wraplength=170, font=MONO12,
-                               text_color=TEXT)
-            lbl.pack(side="left", fill="x", expand=True, pady=4)
-            lbl.bind("<Double-Button-1>", lambda e, t=term: edit_term(t))
+            terms_tree.insert("", "end", iid=str(i - 1), values=("%d." % i, term), tags=("odd",) if i % 2 else ())
+        if terms: terms_empty.place_forget()
+        else:
+            terms_empty.configure(text=T("terms_empty")); terms_empty.place(relx=0.5, rely=0.12, anchor="n")
         terms_count.configure(text=T("terms_count", n=len(terms)))
+    def picked():
+        terms = terms_of(cur_list[0])
+        return [terms[int(i)] for i in terms_tree.selection() if int(i) < len(terms)]
     retranslate.append(render_terms)
 
     def merged(raw):
@@ -2352,12 +2514,36 @@ def run_gui(agent):
         cur, added = merged(term_entry.get())
         term_entry.delete(0, "end")
         if added: set_terms(cur, added_note(added))
-    def remove_term(t):
-        set_terms([x for x in terms_of(cur_list[0]) if x != t], T("term_removed", s=t))
+    def remove_terms(gone):
+        if not gone: return
+        set_terms([x for x in terms_of(cur_list[0]) if x not in gone],
+                  T("term_removed", s=gone[0]) if len(gone) == 1 else T("terms_removed_n", n=len(gone)))
     def edit_term(t):
         set_terms([x for x in terms_of(cur_list[0]) if x != t], None)
         term_entry.delete(0, "end"); term_entry.insert(0, t); term_entry.focus_set()
     term_entry.bind("<Return>", lambda e: add_from_entry())
+    terms_tree.bind("<Double-Button-1>", lambda e: (edit_term(picked()[0]) if picked() else None, "break")[1])
+    for ev in ("<Delete>", "<BackSpace>"):
+        terms_tree.bind(ev, lambda e: (remove_terms(picked()), "break")[1])
+    term_menu = tk.Menu(root, tearoff=0, bg=SURF2, fg=TEXT, activebackground=SEL_H, activeforeground=TEXT,
+                        disabledforeground=FAINT, bd=0, relief="flat", font=(UI, 10))
+    def term_popup(e):
+        row = terms_tree.identify_row(e.y)
+        if row and row not in terms_tree.selection(): terms_tree.selection_set(row)
+        sel = picked()
+        term_menu.delete(0, "end")
+        term_menu.add_command(label=T("term_edit"), state="normal" if len(sel) == 1 else "disabled",
+                              command=lambda: edit_term(sel[0]))
+        term_menu.add_command(label=T("menu_copy"), state="normal" if sel else "disabled",
+                              command=lambda: (root.clipboard_clear(), root.clipboard_append("\n".join(sel))))
+        term_menu.add_separator()
+        term_menu.add_command(label=T("term_remove_sel", n=len(sel)), accelerator="Del",
+                              state="normal" if sel else "disabled", command=lambda: remove_terms(sel))
+        try: term_menu.tk_popup(e.x_root, e.y_root)
+        finally: term_menu.grab_release()
+        return "break"
+    for ev in (("<Button-2>", "<Control-Button-1>") if sys.platform == "darwin" else ("<Button-3>",)):
+        terms_tree.bind(ev, term_popup)
 
     def new_list():
         v = ctk.CTkInputDialog(text=T("list_new_q"), title=T("list_new_title")).get_input()
@@ -2371,6 +2557,19 @@ def run_gui(agent):
             agent.mapper.set_lists(lists() + [{"prefix": p, "terms": []}]); cur_list[0] = p
             gui.flash(T("list_created", p=p), "ok")
         render_terms(); term_entry.focus_set()
+    def rename_list():
+        old = cur_list[0]
+        if old == DEFAULT: return
+        v = ctk.CTkInputDialog(text=T("list_rename_q", p=old), title=T("list_rename")).get_input()
+        if v is None or not v.strip(): return
+        new = norm_prefix(v)
+        if not new: return gui.flash(T("list_bad"), "warn")
+        if new == old: return
+        if new.lower() == DEFAULT.lower(): return gui.flash(T("list_bad"), "warn")
+        # renaming onto an existing list merges the two (norm_lists joins lists with the same name)
+        agent.mapper.set_lists([dict(l, prefix=new) if l["prefix"] == old else l for l in lists()])
+        cur_list[0] = next(l["prefix"] for l in lists() if l["prefix"].lower() == new.lower())
+        render_terms(); remask(T("list_renamed", old=old, new=cur_list[0]), True)
     def delete_list():
         name = cur_list[0]
         if name == DEFAULT or not messagebox.askyesno(T("list_delete"), T("list_delete_q", p=name), parent=root):
@@ -2415,6 +2614,10 @@ def run_gui(agent):
     style.map("Ledger.Treeview", background=[("selected", "#1C2A3D")], foreground=[("selected", TEXT)])
     style.map("Ledger.Treeview.Heading", background=[("active", SURF)], foreground=[("active", MUTED)])
     style.layout("Ledger.Treeview", [("Ledger.Treeview.treearea", {"sticky": "nswe"})])
+    style.configure("Terms.Treeview", background=INK, fieldbackground=INK, foreground=TEXT, borderwidth=0,
+                    relief="flat", rowheight=int(28 * sc), font=(MONO, 10))
+    style.map("Terms.Treeview", background=[("selected", SEL)], foreground=[("selected", TEXT)])
+    style.layout("Terms.Treeview", [("Terms.Treeview.treearea", {"sticky": "nswe"})])
     tree_wrap = clear(led_card); tree_wrap.pack(fill="both", expand=True, padx=(12, 6), pady=10)
     tree = ttk.Treeview(tree_wrap, columns=("type", "real", "fake"), show="headings", style="Ledger.Treeview")
     for col, key, w in (("type", "col_type", 120), ("real", "col_real", 360), ("fake", "col_token", 360)):
@@ -2427,12 +2630,23 @@ def run_gui(agent):
     empty_lbl = tx(ctk.CTkLabel(led_card, font=F(13), text_color=FAINT, justify="center"), "empty_ledger")
     search.bind("<KeyRelease>", lambda e: gui.refresh())
 
+    tree_key = [None]
+    LEDGER_SHOW = 3000
+
     # ---------- bridge used by the watcher thread ----------
     TONES = {"ok": TEAL, "real": CORAL, "info": MUTED, "warn": CORAL}
     class Gui:
         def refresh(self):
             def _():
                 q = search.get().strip().lower()
+                total = len(agent.mapper.entries)
+                ledger_badge.configure(text=T("ledger_badge", n=total) if total else "")
+                if auto_var.get() != agent.auto: auto_var.set(agent.auto)
+                dot.configure(text_color=TEAL if agent.auto else FAINT)
+                hero_title.configure(text=T("hero_on" if agent.auto else "hero_off"))
+                key = (total, q, _lang[0])
+                if current[0] != "tab_ledger" or tree_key[0] == key: return
+                tree_key[0] = key
                 tree.delete(*tree.get_children())
                 def kind(e):
                     p = e["fake"].rsplit("_", 1)[0]
@@ -2443,17 +2657,13 @@ def run_gui(agent):
                     return T("secret_shown", n=len(e["real"])) if e.get("secret") else e["real"]
                 rows = [e for e in agent.mapper.entries
                         if not q or q in shown(e).lower() or q in e["fake"].lower() or q in type_label(e["type"]).lower()]
-                for i, e in enumerate(reversed(rows)):
+                for i, e in enumerate(list(reversed(rows))[:LEDGER_SHOW]):
                     tree.insert("", "end", values=(kind(e), shown(e), e["fake"]),
                                 tags=("odd",) if i % 2 else ())
-                total = len(agent.mapper.entries)
-                ledcount.configure(text=T("rows_q", k=len(rows), n=total) if q else T("rows", n=total))
-                ledger_badge.configure(text=T("ledger_badge", n=total) if total else "")
+                ledcount.configure(text=(T("rows_q", k=len(rows), n=total) if q else T("rows", n=total)) +
+                                   (T("rows_cap", k=LEDGER_SHOW) if len(rows) > LEDGER_SHOW else ""))
                 if total: empty_lbl.place_forget()
                 else: empty_lbl.place(relx=0.5, rely=0.5, anchor="center")
-                if auto_var.get() != agent.auto: auto_var.set(agent.auto)
-                dot.configure(text_color=TEAL if agent.auto else FAINT)
-                hero_title.configure(text=T("hero_on" if agent.auto else "hero_off"))
             root.after(0, _)
         def flash(self, msg, tone="info"):
             stamp = time.strftime("%H:%M")
@@ -2602,6 +2812,7 @@ def main():
               "  pip install pyperclip pynput")
     _migrate_store()
     agent = Agent()
+    agent.mapper.collector = process_collector
     set_lang(agent.mapper.settings.get("lang") or detect_lang())
     if not _single_instance():
         print(T("already_running"))
@@ -2613,7 +2824,10 @@ def main():
             pass
         return
     try:
-        run_gui(agent)
+        try:
+            run_gui(agent)
+        finally:
+            shutdown_pool()
     except SystemExit:
         raise
     except Exception as ex:
@@ -2637,4 +2851,6 @@ def main():
 
 
 if __name__ == "__main__":
+    import multiprocessing
+    multiprocessing.freeze_support()           # the frozen exe also runs the masking worker
     main()

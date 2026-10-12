@@ -303,6 +303,8 @@ def check_classify(engine):
     problems = []
     if m.classify(ai)[0] != "restore": problems.append("AI answer not classified as restore")
     if m.classify("new log: 172.16.9.9 app07 error")[0] != "anon": problems.append("new log not classified as mask")
+    if m.process(ai)[0] != "restore" or m.process("new log: 172.16.9.9 app07 error", smart=False)[0] != "anon":
+        problems.append("process() disagrees with classify()")
     back = m.restore(ai)[0]
     if "10.10.10.20" not in back or "web01" not in back or "kemal" not in back:
         problems.append("restore incomplete: %s" % back)

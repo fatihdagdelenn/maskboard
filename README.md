@@ -190,11 +190,14 @@ the original encoding; the web page always writes UTF-8.
 
 ### How much text
 
-There is no size limit. Masking takes about 0.4 s per 100 KB in the desktop app and about
-0.1 s in the web page, so a 1 MB log takes a few seconds on the desktop and about one second
-in the browser. Restoring is much faster. Large texts are processed in the background so the
-window stays responsive, and outputs over about half a megabyte are shown without colouring
-the tokens.
+There is no size limit. Masking takes about 3.5 s per MB in the desktop app and well under a
+second per MB in the web page; restoring is much faster. In the desktop app, texts from about
+150 KB on are masked in the background, and from 200 KB on in a separate worker process, so the
+window stays responsive while a large log is being masked. If you press Mask again meanwhile,
+only the latest request runs next. Outputs over about 600 KB are shown without colouring the
+tokens, and auto-watch leaves copies over 3 MB alone (use *Open file* for those). Long custom
+term lists (thousands of names) are fast too: plain names are found with a substring search
+instead of a pattern each.
 
 ## What gets masked, and what doesn't
 
@@ -353,7 +356,10 @@ dropped. Names use the letters A–Z, digits and `_` and start with a letter.
 starting with `#` are skipped) or a `.csv` / `.tsv`, from which the first column is taken and a
 header row such as `Name` is skipped, so a VM export from your hypervisor can be used as is.
 The list selector switches between lists; `Alt+M` and the right-click menu add to the selected
-one.
+one. **Rename** fixes a mistyped list name: its terms get the new token name from the next mask
+on, and tokens already given out keep restoring; renaming to the name of another list merges
+the two. In the term list, double-click edits a term, and `Delete` or the right-click menu
+removes the selected terms (several at once with `Ctrl`/`Shift`).
 
 - A value that already had another token (for example `HOST_3`) gets the list's token from now
   on; the old token keeps restoring, so earlier AI answers still work.

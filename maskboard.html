@@ -233,7 +233,7 @@
   .terms-head b{color:var(--text);font-weight:600}
   .terms-head span{font-family:var(--mono);font-size:11px;color:var(--text-faint)}
   .term-lists,.term-tools{display:flex;gap:7px;margin-bottom:7px}
-  .term-tools{justify-content:space-between}
+  .term-tools .grow{flex:1}
   .term-lists select{flex:1;min-width:0;background:var(--panel-2);color:var(--text);border:1px solid var(--line);
     border-radius:7px;padding:6px 8px;font-family:var(--mono);font-size:12.5px;outline:none}
   .term-lists select:focus{border-color:var(--act)}
@@ -277,7 +277,7 @@
     <div class="brand">
       <div class="logo" aria-hidden="true"></div>
       <div>
-        <h1>MaskBoard <span class="ver">v1.3.0</span></h1>
+        <h1>MaskBoard <span class="ver">v1.3.1</span></h1>
         <div class="sub" data-i18n="tagline"></div>
       </div>
     </div>
@@ -388,6 +388,8 @@
           </div>
           <div class="term-tools">
             <button class="ghost mini" id="btnImportList" data-i18n="list_import"></button>
+            <span class="grow"></span>
+            <button class="ghost mini" id="btnRenameList" data-i18n="list_rename"></button>
             <button class="ghost mini danger" id="btnDelList" data-i18n="list_delete"></button>
             <input type="file" id="fileTerms" accept=".txt,.csv,.tsv,.list,.lst,text/plain,text/csv" hidden>
           </div>
@@ -562,7 +564,7 @@ const MaskBoardEngine = (function () {
     _D + "[ \\-/.]?(?:" + _MON + ")\\.?[ \\-/.,]*" + _Y,
     "(?:" + _MON + ")\\.?[ \\-]" + _D + ",?[ \\-]" + _Y,
   ].join("|");
-  const DATE_RE = G("(?<!\\d)(?<!\\d[.\\-/])(?:" + DATE_BODY + ")(?!\\d|[.\\-/]\\d)", "i");
+  const DATE_RE = G("(?=[0-9a-zşŞ])(?<!\\d)(?<!\\d[.\\-/])(?:" + DATE_BODY + ")(?!\\d|[.\\-/]\\d)", "i");
 
   // ---- secrets ----
   const PW_CORE = "passwd|password|passwort|passphrase|pwd|kennwort|contraseña|contrasena|motdepasse|" +
@@ -748,7 +750,7 @@ const MaskBoardEngine = (function () {
     "el8","el9","fc38","fc39","fc40","win10","win11","dotnet6","dotnet8","node18","node20","node22"]);
   const KW_RE = G(BL + "(?<k>hostname|nodename|node|computername|computer|dnsname|host|cn)" + BR +
     "\\s*[:=]\\s*[\"']?(?<v>[A-Za-z][A-Za-z0-9\\-]{1,62})[\"']?", "i");
-  const TOK_RE = G(BL + "[A-Za-z][A-Za-z0-9]*(?:-[A-Za-z0-9]+)*" + BR);
+  const TOK_RE = G(BL + "(?=[A-Za-z0-9\\-]*\\d)[A-Za-z][A-Za-z0-9]*(?:-[A-Za-z0-9]+)*" + BR);
   const HOST_NOISE = words(`thread threads pool worker workers task tasks exec executor nio ajp main job batch
     session sess req request conn connection tx timer scheduler async default eventloop loop reactor line row
     col page step item port pid tid build rev release version ver attempt retry try phase stage part chunk
@@ -930,8 +932,8 @@ const MaskBoardEngine = (function () {
   const TERM_SPACE = "[ \\t\\r\\n\\u00a0]+";
   const normTerm = t => (t || "").replace(new RegExp(TERM_SPACE, "gu"), " ").replace(/^ +| +$/g, "");
   function normTerms(terms) {
-    const out = [];
-    for (const t of (terms || []).map(normTerm)) if (t && !out.includes(t)) out.push(t);
+    const out = [], seen = new Set();
+    for (const t of (terms || []).map(normTerm)) if (t && !seen.has(t)) { seen.add(t); out.push(t); }
     return out;
   }
   function normLists(lists) {
@@ -945,7 +947,9 @@ const MaskBoardEngine = (function () {
     }
     return [...out.values()];
   }
+  const termReCache = new Map();
   function termRe(term) {
+    if (termReCache.has(term)) { const r = termReCache.get(term); r.lastIndex = 0; return r; }
     let src = "";
     for (const ch of term) {
       if (ch === " ") src += TERM_SPACE;
@@ -956,7 +960,43 @@ const MaskBoardEngine = (function () {
         src += "[" + [...v].sort().join("") + "]";
       } else src += esc(ch);
     }
-    return G(src);
+    const r = G(src);
+    if (termReCache.size > 8000) termReCache.clear();
+    termReCache.set(term, r);
+    return r;
+  }
+  // Fast path for custom terms made of ASCII and Turkish letters: fold case and Turkish letters one
+  // character for one character, then a plain substring search finds exactly what the term's regex
+  // would find. Terms with spaces keep the regex, after a pre-check on collapsed whitespace.
+  const FOLD = {};
+  for (const g of ["iıİI", "uüUÜ", "oöOÖ", "cçCÇ", "sşSŞ", "gğGĞ"]) for (const ch of g) FOLD[ch] = g[0].toLowerCase();
+  for (const c of "ABCDEFGHIJKLMNOPQRSTUVWXYZ") if (!FOLD[c]) FOLD[c] = c.toLowerCase();
+  for (const c of "\t\r\n\u00a0") FOLD[c] = " ";
+  const FOLD_RE = new RegExp("[" + Object.keys(FOLD).join("").replace(/[\]\\^-]/g, "\\$&") + "]", "g");
+  const FOLDABLE = /^[\x20-\x7eıİüÜöÖçÇşŞğĞ]+$/;
+  const foldText = text => text.replace(FOLD_RE, c => FOLD[c]);
+  const foldCache = new Map();
+  function foldTerm(term) {
+    if (!foldCache.has(term)) foldCache.set(term, FOLDABLE.test(term) ? foldText(term) : null);
+    return foldCache.get(term);
+  }
+  function findAll(hay, needle) {
+    const out = [];
+    for (let i = hay.indexOf(needle); i >= 0; i = hay.indexOf(needle, i + needle.length)) out.push([i, i + needle.length]);
+    return out;
+  }
+  /** hit(s, e): does [s, e) overlap any of the spans? merged once, then binary-searched */
+  function spanIndex(spans) {
+    const merged = [];
+    for (const [a, b] of spans.slice().sort((x, y) => (x[0] - y[0]) || (x[1] - y[1]))) {
+      if (merged.length && a < merged[merged.length - 1][1]) merged[merged.length - 1][1] = Math.max(merged[merged.length - 1][1], b);
+      else merged.push([a, b]);
+    }
+    return (s, e) => {
+      let lo = 0, hi = merged.length;
+      while (lo < hi) { const mid = (lo + hi) >> 1; if (merged[mid][1] <= s) lo = mid + 1; else hi = mid; }
+      return lo < merged.length && merged[lo][0] < e;
+    };
   }
   /** identifier-part boundary between a and b (snake_case, camelCase, letter|digit) */
   function partBreak(a, b) {
@@ -1207,9 +1247,16 @@ const MaskBoardEngine = (function () {
           add(s, s + cm.groups.p.length, cm.groups.p, "project", null, null, true);
         else if (!isToken(repo) && [...repo].length >= 3) add(s, s + repo.length, repo, "project", null, null, true);
       };
+      /** [start, line] from pos on, without copying the rest of the text */
+      function* linesFrom(pos) {
+        while (pos <= text.length) {
+          const nl = text.indexOf("\n", pos), end = nl < 0 ? text.length : nl;
+          yield [pos, text.slice(pos, end)];
+          pos = end + 1;
+        }
+      }
       for (const h of all(DOCKER_PS_HDR, text)) {
-        let pos = h.index + h[0].length + 1;
-        for (const line of text.slice(pos).split("\n")) {
+        for (const [pos, line] of linesFrom(h.index + h[0].length + 1)) {
           const row = /^([0-9a-f]{12})\s+(?<img>\S+)/du.exec(line);
           if (!row) break;
           const last = /(\S+)\s*$/du.exec(line);
@@ -1222,26 +1269,36 @@ const MaskBoardEngine = (function () {
             if (pub && n === repo.split("/").pop()) continue;
             addContainer(pos + last.indices[1][0] + nm.index, n);
           }
-          pos += line.length + 1;
         }
       }
       for (const h of all(DOCKER_IMAGES_HDR, text)) {
-        let pos = h.index + h[0].length + 1;
-        for (const line of text.slice(pos).split("\n")) {
+        for (const [pos, line] of linesFrom(h.index + h[0].length + 1)) {
           const row = /^(?<repo>\S+)\s+\S+\s+[0-9a-f]{12}\s/u.exec(line);
           if (!row) break;
           const [repo, , local] = imageParts(row.groups.repo);
           if (local && repo !== "<none>") addLocalImage(pos, repo);
-          pos += line.length + 1;
         }
       }
 
       // 8) custom terms (case-insensitive) and national IDs
-      for (const [term, prefix] of this._termPrefixes())
-        for (const m of all(termRe(term), text)) {
-          const span = customSpan(text, m.index, m.index + m[0].length);
+      let folded = null, collapsed = null;
+      for (const [term, prefix] of this._termPrefixes()) {
+        const ft = foldTerm(term);
+        let hits;
+        if (ft === null) hits = all(termRe(term), text).map(m => [m.index, m.index + m[0].length]);
+        else {
+          if (folded === null) folded = foldText(text);
+          if (ft.includes(" ")) {
+            if (collapsed === null) collapsed = folded.replace(/ {2,}/g, " ");
+            if (!collapsed.includes(ft)) continue;
+            hits = all(termRe(term), text).map(m => [m.index, m.index + m[0].length]);
+          } else hits = findAll(folded, ft);
+        }
+        for (const [a, b] of hits) {
+          const span = customSpan(text, a, b);
           if (span) add(span[0], span[1], text.slice(span[0], span[1]), "custom", prefix);
         }
+      }
       for (const m of all(NATID_RE, text)) if (natidOk(m[0])) add(m.index, m.index + m[0].length, m[0], "natid");
 
       // 9) dates
@@ -1325,9 +1382,10 @@ const MaskBoardEngine = (function () {
         for (const m of all(spreadRe(v), text)) add(m.index, m.index + v.length, v, typ, p, P_SPREAD);
       }
 
-      let kept = found.filter(f => !protectedSpans.some(([ps, pe]) => f[0] < pe && ps < f[1]));
+      let kept = found;
+      if (protectedSpans.length) { const hit = spanIndex(protectedSpans); kept = kept.filter(f => !hit(f[0], f[1])); }
       const secretSpans = kept.filter(f => f[3] === "secret").map(f => [f[0], f[1]]);
-      kept = kept.filter(f => f[3] !== "url" || !secretSpans.some(([ss, se]) => f[0] < se && ss < f[1]));
+      if (secretSpans.length) { const hit = spanIndex(secretSpans); kept = kept.filter(f => f[3] !== "url" || !hit(f[0], f[1])); }
       kept.sort((a, b) => (a[0] - b[0]) || (b[5] - a[5]) || ((b[1] - b[0]) - (a[1] - a[0])));
       let chosen = [], lastEnd = -1;
       for (const f of kept) if (f[0] >= lastEnd) { chosen.push(f); lastEnd = f[1]; }
@@ -1468,7 +1526,9 @@ const MaskBoardEngine = (function () {
       terms_title: "Custom terms", terms_count: "{n} terms", terms_count_1: "1 term", terms_ph: "New term — Enter adds it",
       terms_add: "Add", terms_empty: "No custom terms yet. Type one above, or select text in the input and press <kbd>Alt</kbd>+<kbd>M</kbd>.",
       t_terms_added_n: "{n} custom terms added", t_term_removed: "Removed from custom terms: {s}", term_edit: "Double-click to edit", term_remove: "Remove",
-      list_new: "+ List", list_import: "Import list…", list_delete: "Delete list", list_tokens: "Tokens: {p}_1, {p}_2 …",
+      list_new: "+ List", list_import: "Import…", list_delete: "Delete", list_rename: "Rename", list_tokens: "Tokens: {p}_1, {p}_2 …",
+      list_rename_q: "New name for the list {p}. Its terms get the new token name from the next mask on; tokens already given out keep restoring. An existing list's name merges the two.",
+      t_list_renamed: "List {old} renamed to {new}",
       list_new_q: "Name of the list — it becomes the token name (vmachine → vmachine_1, vmachine_2 …). Letters A–Z, digits and _, starting with a letter.",
       t_list_bad: "That name can't be used: letters A–Z, digits and _, starting with a letter.",
       t_list_created: "List {p} created — its terms become {p}_1, {p}_2 …",
@@ -1530,7 +1590,9 @@ const MaskBoardEngine = (function () {
       terms_title: "Özel terimler", terms_count: "{n} terim", terms_count_1: "1 terim", terms_ph: "Yeni terim — Enter ile ekle",
       terms_add: "Ekle", terms_empty: "Henüz özel terim yok. Yukarıya yaz ya da girişte metni seçip <kbd>Alt</kbd>+<kbd>M</kbd>'ye bas.",
       t_terms_added_n: "{n} özel terim eklendi", t_term_removed: "Özel terimlerden çıkarıldı: {s}", term_edit: "Düzenlemek için çift tıkla", term_remove: "Sil",
-      list_new: "+ Liste", list_import: "Liste içe aktar…", list_delete: "Listeyi sil", list_tokens: "Etiketler: {p}_1, {p}_2 …",
+      list_new: "+ Liste", list_import: "İçe aktar…", list_delete: "Sil", list_rename: "Adı değiştir", list_tokens: "Etiketler: {p}_1, {p}_2 …",
+      list_rename_q: "{p} listesinin yeni adı. Terimleri bir sonraki maskelemeden itibaren yeni etiket adını alır; daha önce verilen etiketler geri çevrilmeye devam eder. Var olan bir listenin adını yazarsan ikisi birleşir.",
+      t_list_renamed: "{old} listesinin adı {new} oldu",
       list_new_q: "Listenin adı — etiket adı olur (vmachine → vmachine_1, vmachine_2 …). A–Z harfleri, rakam ve _; harfle başlamalı.",
       t_list_bad: "Bu ad kullanılamaz: A–Z harfleri, rakam ve _; harfle başlamalı.",
       t_list_created: "{p} listesi oluşturuldu — terimleri {p}_1, {p}_2 … olur",
@@ -1644,7 +1706,7 @@ const MaskBoardEngine = (function () {
     lang = b.dataset.lang; lsSet(LANG_KEY, lang); applyLang();
   });
 
-  const HIGHLIGHT_MAX = 2000000, BUSY_MIN = 400000;
+  const HIGHLIGHT_MAX = 600000, BUSY_MIN = 400000;
   // ---------- syntax colours for the outputs (display only, mirrors syntax_spans in maskboard.py) ----------
   const SYN_KW = ("def class import from return if elif else for while in not and or try except finally raise " +
     "with as is lambda yield async await pass break continue global function const let var new throw " +
@@ -1865,7 +1927,7 @@ const MaskBoardEngine = (function () {
     if (!names.includes(curList)) curList = DEFAULT_LIST;
     $("termListSel").innerHTML = names.map(n => `<option>${esc(n)}</option>`).join("");
     $("termListSel").value = curList;
-    $("btnDelList").disabled = curList === DEFAULT_LIST;
+    $("btnDelList").disabled = $("btnRenameList").disabled = curList === DEFAULT_LIST;
     $("termTokens").textContent = t("list_tokens", { p: curList });
   }
   const addedNote = added => added.length > 1 ? t("t_terms_added_n", { n: added.length })
@@ -1902,6 +1964,18 @@ const MaskBoardEngine = (function () {
     if (same) curList = same;
     else { m.setLists(m.customLists.concat([{ prefix: p, terms: [] }])); curList = p; toast(t("t_list_created", { p })); }
     renderTerms(); $("termInput").focus();
+  };
+  $("btnRenameList").onclick = () => {
+    const old = curList;
+    if (old === DEFAULT_LIST) return;
+    const v = prompt(t("list_rename_q", { p: old }), old);
+    if (v === null || !v.trim()) return;
+    const p = E.normPrefix(v);
+    if (!p || p.toLowerCase() === DEFAULT_LIST.toLowerCase()) { toast(t("t_list_bad")); return; }
+    if (p === old) return;
+    m.setLists(m.customLists.map(l => l.prefix === old ? { prefix: p, terms: l.terms } : l));
+    curList = m.customLists.find(l => l.prefix.toLowerCase() === p.toLowerCase()).prefix;
+    setTerms(termsOf(curList), t("t_list_renamed", { old, new: curList }));
   };
   $("btnDelList").onclick = () => {
     const name = curList;
