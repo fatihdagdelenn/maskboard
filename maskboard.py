@@ -44,7 +44,7 @@ def _import_pystray():
 pystray = _import_pystray()
 
 APP_NAME = "MaskBoard"
-APP_VERSION = "1.2.0"
+APP_VERSION = "1.3.0"
 HOME = os.path.expanduser("~")
 STORE = os.path.join(HOME, ".maskboard.json")
 LEGACY_STORES = [os.path.join(HOME, n) for n in (".clipveil.json", ".anonim_ajan.json")]   # earlier names
@@ -72,9 +72,20 @@ TOKEN_PREFIXES = ["NATIONAL_ID", "IPV6_PRIV", "IPV6_PUB", "IP_PRIV", "IP_PUB", "
                   "DOMAIN", "SCHEMA", "SECRET", "CONFIG", "CUSTOM", "TOKEN", "IFACE", "HOST", "MAIL",
                   "JNDI", "USER", "DATE", "URL", "MAC", "DS", "DB"] + sorted(LEGACY_PREFIXES)
 # Not part of a word (MYDB_1) or of an UPPER_CASE identifier (DB_HOST_1); IP_1 ≠ IP_10.
-TOKEN_RE = re.compile(r"(?<![A-Za-z0-9])(?<![A-Z]_)(?:%s)_\d+(?!\d)" %
-                      "|".join(sorted(TOKEN_PREFIXES, key=len, reverse=True)))
+def token_re_for(prefixes):
+    return re.compile(r"(?<![A-Za-z0-9])(?<![A-Z]_)(?:%s)_\d+(?!\d)" %
+                      "|".join(re.escape(p) for p in sorted(set(prefixes), key=lambda p: (-len(p), p))))
+TOKEN_RE = token_re_for(TOKEN_PREFIXES)
 def is_token(s): return bool(TOKEN_RE.fullmatch(s or ""))
+
+# Your own term lists get your own token name: a "vmachine" list gives vmachine_1, vmachine_2 …
+PREFIX_RE = re.compile(r"[A-Za-z][A-Za-z0-9_]{0,31}")
+
+def norm_prefix(p):
+    """'vmachine_1' or 'vmachine' → 'vmachine'; spaces and dashes become '_'. None if unusable."""
+    p = re.sub(r"[\s\-]+", "_", (p or "").strip())
+    p = re.sub(r"(?:_\d+)+$", "", p).rstrip("_")
+    return p if PREFIX_RE.fullmatch(p) else None
 
 TYPE_PREFIX = {"mac": "MAC", "hostname": "HOST", "domain": "DOMAIN", "email": "MAIL", "date": "DATE",
                "custom": "CUSTOM", "user": "USER", "container": "CONTAINER", "project": "PROJECT",
@@ -550,6 +561,16 @@ def norm_terms(terms):
         if t and t not in out: out.append(t)
     return out
 
+def norm_lists(lists):
+    out = {}
+    for l in lists or []:
+        p = norm_prefix((l or {}).get("prefix"))
+        if not p: continue
+        key = p.lower()
+        if key not in out: out[key] = {"prefix": p, "terms": []}
+        out[key]["terms"] = norm_terms(out[key]["terms"] + list(l.get("terms") or []))
+    return list(out.values())
+
 def _term_re(term):
     out = []
     for ch in term:
@@ -591,6 +612,7 @@ class Mapper:
         self.lock = threading.RLock()
         self._reset()
         self.custom_terms = []
+        self.custom_lists = []     # [{"prefix": "vmachine", "terms": [...]}]
         self.settings = {}
         self.load()
 
@@ -601,6 +623,26 @@ class Mapper:
         self.secret_map = {}
         self.tok = {}              # token → real
         self.counters = {}         # prefix → last number
+        self._extra = set()        # token prefixes of your own lists found in the ledger
+        self._tre = (None, TOKEN_RE)
+
+    def _list_prefixes(self):
+        return {l["prefix"] for l in self.custom_lists}
+
+    def token_re(self):
+        """TOKEN_RE plus the prefixes of your own lists (also of deleted ones still in the ledger)."""
+        key = frozenset(self._extra | self._list_prefixes())
+        if key != self._tre[0]:
+            self._tre = (key, token_re_for(TOKEN_PREFIXES + sorted(key)) if key else TOKEN_RE)
+        return self._tre[1]
+
+    def _is_tok(self, s): return bool(self.token_re().fullmatch(s or ""))
+
+    def _note_prefix(self, e):
+        """Remember the prefix of a custom-list token read from a ledger, so it keeps restoring."""
+        if e.get("type") == "custom":
+            m = re.fullmatch(r"([A-Za-z][A-Za-z0-9_]*)_\d+", e.get("fake") or "")
+            if m and m.group(1) not in TOKEN_PREFIXES: self._extra.add(m.group(1))
 
     def _token(self, prefix):
         n = self.counters.get(prefix, 0) + 1
@@ -609,11 +651,12 @@ class Mapper:
 
     def _register(self, real, typ, prefix, secret=False, prop=False):
         m = self.secret_map if secret else self.real_to_fake
-        if real in m and not (not secret and self._should_upgrade(m[real], prefix)):
+        if real in m and not (not secret and self._should_upgrade(m[real], prefix, typ)):
             if prop and not secret and real in self.by_real:
                 self.by_real[real]["prop"] = True
             return m[real]
         t = self._token(prefix)
+        if prefix not in TOKEN_PREFIXES: self._extra.add(prefix)
         m[real] = t; self.tok[t] = real
         e = {"real": real, "fake": t, "type": typ}
         if secret: e["secret"] = True
@@ -622,14 +665,14 @@ class Mapper:
         if not secret: self.by_real[real] = e
         return t
 
-    @staticmethod
-    def _should_upgrade(old, prefix):
-        """Give a new token when the stored one is from an older release or a vaguer type.
-        The old token stays in the ledger, so old AI answers still restore."""
-        if not is_token(old): return True
+    def _should_upgrade(self, old, prefix, typ=None):
+        """Give a new token when the stored one is from an older release or a vaguer type, or when
+        the value is now in one of your own lists. The old token stays in the ledger, so old AI
+        answers still restore."""
+        if not self._is_tok(old): return True
         op = old.rsplit("_", 1)[0]
         if op == prefix: return False
-        if op in LEGACY_PREFIXES: return True
+        if op in LEGACY_PREFIXES or (typ == "custom" and prefix in self._list_prefixes()): return True
         return op == "HOST" and prefix in ("IFACE", "CONTAINER", "PROJECT", "USER")
 
     def _get_fake(self, value, typ, prefix=None, prop=False):
@@ -844,10 +887,10 @@ class Mapper:
                 pos += len(line) + 1
 
         # 8) custom terms (case-insensitive) and national IDs
-        for term in sorted([t for t in self.custom_terms if t], key=len, reverse=True):
+        for term, prefix in self._term_prefixes():
             for m in _term_re(term).finditer(text):
                 span = _custom_span(text, m.start(), m.end())
-                if span: add(span[0], span[1], text[span[0]:span[1]], "custom")
+                if span: add(span[0], span[1], text[span[0]:span[1]], "custom", prefix)
         for m in NATID_RE.finditer(text):
             if _natid_ok(m.group(0)): add(m.start(), m.end(), m.group(0), "natid")
 
@@ -874,7 +917,7 @@ class Mapper:
                 v = re.sub(r"[.,;:!?]+$", "", m.group(0))
                 if _url_kind(v, text) == "mask":
                     add(m.start(), m.start() + len(v), v, "url")
-        protected = [(m.start(), m.end()) for m in TOKEN_RE.finditer(text)]
+        protected = [(m.start(), m.end()) for m in self.token_re().finditer(text)]
         if on("hostname"):
             seen = set()
             for m in KW_RE.finditer(text):
@@ -954,13 +997,13 @@ class Mapper:
     def classify(self, text, opts=None):
         """('restore'|'anon', known tokens, new sensitive values): restore only if known tokens dominate."""
         with self.lock:
-            known = sum(1 for m in TOKEN_RE.finditer(text) if m.group(0) in self.tok)
+            known = sum(1 for m in self.token_re().finditer(text) if m.group(0) in self.tok)
             new = len(self._collect(text, opts))
         return ("restore" if known > 0 and known >= new else "anon"), known, new
 
     def legacy_count(self):
         """Entries with realistic fake values from the very first release."""
-        return sum(1 for e in self.entries if not is_token(e["fake"]))
+        return sum(1 for e in self.entries if not self._is_tok(e["fake"]))
 
     @staticmethod
     def _guard(typ):
@@ -977,8 +1020,8 @@ class Mapper:
                 real = self.tok.get(m.group(0))
                 if real is None: return m.group(0)
                 count[0] += 1; return w(real)
-            text = TOKEN_RE.sub(sub, text)
-            for p in sorted((e for e in self.entries if not is_token(e["fake"])), key=lambda x: -len(x["fake"])):
+            text = self.token_re().sub(sub, text)
+            for p in sorted((e for e in self.entries if not self._is_tok(e["fake"])), key=lambda x: -len(x["fake"])):
                 lb, la = self._guard(p["type"])
                 text, n = re.subn(lb + re.escape(p["fake"]) + la, lambda _m, r=p["real"]: w(r), text)
                 count[0] += n
@@ -994,9 +1037,10 @@ class Mapper:
                     continue
                 ne = {"real": real, "fake": fake, "type": e.get("type", "custom")}
                 if e.get("prop"): ne["prop"] = True
+                self._note_prefix(ne)
                 self.real_to_fake[real] = fake; self.tok[fake] = real
                 self.entries.append(ne); self.by_real[real] = ne
-                if is_token(fake):
+                if self._is_tok(fake):
                     p, n = fake.rsplit("_", 1)
                     self.counters[p] = max(self.counters.get(p, 0), int(n))
                 added += 1
@@ -1009,11 +1053,26 @@ class Mapper:
     def export_data(self):
         """Ledger as stored on disk and in exports. Never contains secrets."""
         return {"version": 3, "entries": self.export_entries(), "counters": self.counters,
-                "custom_terms": self.custom_terms}
+                "custom_terms": self.custom_terms, "custom_lists": self.custom_lists}
 
     def set_custom(self, terms):
         with self.lock:
             self.custom_terms = norm_terms(terms); self.save()
+
+    def set_lists(self, lists):
+        """Your own term lists: [{"prefix": "vmachine", "terms": [...]}]. Same prefix → one list."""
+        with self.lock:
+            self.custom_lists = norm_lists(lists); self.save()
+
+    def _term_prefixes(self):
+        """(term, prefix) longest first; a term in one of your lists wins over the plain custom list."""
+        seen, out = set(), []
+        for l in self.custom_lists:
+            for t in l["terms"]:
+                if t.lower() not in seen: seen.add(t.lower()); out.append((t, l["prefix"]))
+        for t in self.custom_terms:
+            if t.lower() not in seen: seen.add(t.lower()); out.append((t, None))
+        return sorted(out, key=lambda x: -len(x[0]))
 
     def save(self):
         if not self.store: return
@@ -1028,16 +1087,18 @@ class Mapper:
         try:
             with open(self.store, encoding="utf-8") as f: d = json.load(f)
             self.custom_terms = norm_terms(d.get("custom_terms", []))
+            self.custom_lists = norm_lists(d.get("custom_lists", []))
             self.settings = d.get("settings", {}) or {}
             self.counters = {k: int(v) for k, v in d.get("counters", {}).items()}
             for e in d.get("entries", []):
                 if e.get("secret") or not e.get("real") or not e.get("fake"): continue
                 ne = {"real": e["real"], "fake": e["fake"], "type": e.get("type", "custom")}
                 if e.get("prop"): ne["prop"] = True
+                self._note_prefix(ne)
                 self.entries.append(ne)
                 if e["real"] not in self.real_to_fake:
                     self.real_to_fake[e["real"]] = e["fake"]; self.by_real[e["real"]] = ne
-                if is_token(e["fake"]):
+                if self._is_tok(e["fake"]):
                     self.tok[e["fake"]] = e["real"]
                     p, n = e["fake"].rsplit("_", 1)
                     self.counters[p] = max(self.counters.get(p, 0), int(n))
@@ -1141,6 +1202,23 @@ BUSY_MIN = 150_000         # characters: larger texts are processed in the backg
 def human_size(chars):
     return "%.1f MB" % (chars / 1e6) if chars >= 1e6 else "%d KB" % max(1, round(chars / 1e3))
 
+TERM_FILETYPES = [("Text / CSV", "*.txt *.csv *.tsv *.list *.lst"), ("*", "*")]
+TERM_HEADER_RE = re.compile(r"(?i)(?:vm|vm ?name|names?|host ?names?|hosts?|servers?|machines?|ips?|ip ?address(?:es)?|"
+                            r"address(?:es)?|terms?|values?|items?)")
+
+def read_term_file(path):
+    """Terms from a file: one per line (# comments skipped); .csv/.tsv: the first column, header row skipped."""
+    text, _ = read_text_file(path)
+    lines = [l for l in text.splitlines() if l.strip() and not l.lstrip().startswith("#")]
+    ext = os.path.splitext(path)[1].lower()
+    if ext in (".csv", ".tsv") and lines:
+        import csv
+        delim = "\t" if ext == ".tsv" else max(",;\t|", key=lines[0].count)
+        vals = [r[0].strip() for r in csv.reader(lines, delimiter=delim) if r and r[0].strip()]
+        if vals and TERM_HEADER_RE.fullmatch(vals[0]): vals = vals[1:]
+        return norm_terms(vals)
+    return norm_terms(lines)
+
 def derived_path(path, tag):
     """'logs/app.log' → 'logs/app.masked.log'; 'app.masked.log' + 'restored' → 'app.restored.log'."""
     folder, name = os.path.split(path)
@@ -1174,10 +1252,21 @@ STRINGS = {
         "out_title": "Text for the AI", "out_hint": "masked",
         "btn_mask": "Mask", "btn_restore": "Restore", "btn_clear": "Clear", "btn_copy": "Copy", "btn_ok": "OK",
         "terms_title": "Custom terms", "terms_count": "{n} terms", "terms_count_1": "1 term",
-        "terms_hint": "Company, product or project names; long phrases too. Matched as whole words and identifier "
-                      "parts (ACME_Prod, AcmeUser); case, Turkish letters and extra spaces are ignored. Pasting several "
-                      "lines adds each one. Double-click a term to edit it, × removes it. Tip: select text in the "
-                      "input and press Alt+M or right-click.",
+        "terms_hint": "CUSTOM is the default list. For your own names (VMs, servers, IP addresses) make a list "
+                      "with + List: its name becomes the token, e.g. vmachine_1, vmachine_2. Import fills the "
+                      "selected list from a .txt (one per line) or .csv (first column). Terms match whole words and "
+                      "identifier parts, ignoring case, Turkish letters and extra spaces. Double-click to edit, × "
+                      "removes. Alt+M in the input adds to the selected list.",
+        "list_new": "+ List", "list_new_title": "New list",
+        "list_new_q": "Name of the list — it becomes the token name:\nvmachine → vmachine_1, vmachine_2 …\n\n"
+                      "Letters A–Z, digits and _, starting with a letter.",
+        "list_bad": "That name can't be used: letters A–Z, digits and _, starting with a letter.",
+        "list_created": "List {p} created — its terms become {p}_1, {p}_2 …",
+        "list_import": "Import list…", "list_delete": "Delete list",
+        "list_delete_q": "Delete the list {p}?\n\nTokens it already gave out keep restoring.",
+        "list_deleted": "List {p} deleted", "list_tokens": "Tokens: {p}_1, {p}_2 …",
+        "list_imported": "{n} terms imported into {p}", "list_imported_1": "1 term imported into {p}",
+        "list_import_none": "No new terms in that file.", "term_added_to": "Added to {p}: {s}",
         "terms_ph": "New term — Enter adds it", "terms_add": "Add", "terms_added_n": "{n} custom terms added", "term_removed": "Removed from custom terms: {s}",
         "terms_empty": "No custom terms yet. Type one above, or select text in the input and press Alt+M.",
         "menu_add": "Add “{s}” to custom terms", "menu_add_none": "Add selection to custom terms",
@@ -1268,10 +1357,21 @@ STRINGS = {
         "btn_mask": "Anonimleştir", "btn_restore": "Geri çevir", "btn_clear": "Temizle", "btn_copy": "Kopyala",
         "btn_ok": "Tamam",
         "terms_title": "Özel terimler", "terms_count": "{n} terim",
-        "terms_hint": "Firma, ürün ya da proje adları; uzun ifadeler de olur. Tam kelime ve tanımlayıcı parçası "
-                      "olarak bulunur (ACME_Prod, AcmeUser); büyük/küçük harf, Türkçe harfler ve fazla boşluklar "
-                      "önemsizdir. Birden çok satır yapıştırırsan her satır ayrı terim olur. Düzenlemek için terime "
-                      "çift tıkla, × siler. İpucu: girişte metni seçip Alt+M'ye bas ya da sağ tıkla.",
+        "terms_hint": "CUSTOM varsayılan liste. Kendi adların (VM, sunucu, IP adresi) için + Liste ile bir liste "
+                      "aç: adı etiket adı olur, örn. vmachine_1, vmachine_2. İçe aktar seçili listeyi .txt (her "
+                      "satıra bir terim) ya da .csv (ilk sütun) dosyasından doldurur. Terimler tam kelime ve "
+                      "tanımlayıcı parçası olarak bulunur; büyük/küçük harf, Türkçe harfler ve fazla boşluklar "
+                      "önemsizdir. Çift tık düzenler, × siler. Girişte Alt+M seçili listeye ekler.",
+        "list_new": "+ Liste", "list_new_title": "Yeni liste",
+        "list_new_q": "Listenin adı — etiket adı olur:\nvmachine → vmachine_1, vmachine_2 …\n\n"
+                      "A–Z harfleri, rakam ve _; harfle başlamalı.",
+        "list_bad": "Bu ad kullanılamaz: A–Z harfleri, rakam ve _; harfle başlamalı.",
+        "list_created": "{p} listesi oluşturuldu — terimleri {p}_1, {p}_2 … olur",
+        "list_import": "Liste içe aktar…", "list_delete": "Listeyi sil",
+        "list_delete_q": "{p} listesi silinsin mi?\n\nDaha önce verdiği etiketler geri çevrilmeye devam eder.",
+        "list_deleted": "{p} listesi silindi", "list_tokens": "Etiketler: {p}_1, {p}_2 …",
+        "list_imported": "{p} listesine {n} terim aktarıldı",
+        "list_import_none": "Dosyada yeni terim yok.", "term_added_to": "{p} listesine eklendi: {s}",
         "terms_ph": "Yeni terim — Enter ile ekle", "terms_add": "Ekle", "terms_added_n": "{n} özel terim eklendi",
         "term_removed": "Özel terimlerden çıkarıldı: {s}",
         "terms_empty": "Henüz özel terim yok. Yukarıya yaz ya da girişte metni seçip Alt+M'ye bas.",
@@ -1764,7 +1864,7 @@ def run_gui(agent):
         text = text.replace("\r\n", "\n")
         set_text(tb, text)
         if len(text) > HIGHLIGHT_MAX: return
-        for m in TOKEN_RE.finditer(text):
+        for m in agent.mapper.token_re().finditer(text):
             tb.tag_add("fake", "1.0+%dc" % m.start(), "1.0+%dc" % m.end())
 
     def show_restored(tb, text):
@@ -2141,6 +2241,9 @@ def run_gui(agent):
         try:
             with open(p, encoding="utf-8") as f: d = json.load(f)
             n = agent.mapper.import_entries(d.get("entries", []))
+            agent.mapper.set_custom(agent.mapper.custom_terms + list(d.get("custom_terms") or []))
+            agent.mapper.set_lists(agent.mapper.custom_lists + list(d.get("custom_lists") or []))
+            render_terms()
         except Exception as ex:
             return gui.flash(T("import_failed", e=ex), "warn")
         gui.refresh(); gui.flash(T("imported", n=n), "ok")
@@ -2153,12 +2256,27 @@ def run_gui(agent):
     btn(bar, "export", do_export, "secondary", width=100).pack(side="right", padx=(0, 8))
 
     led_row = clear(pd); led_row.pack(fill="both", expand=True)
-    # custom terms: a numbered list (one row per term) with an entry to add new ones
+    # custom terms: the default list (CUSTOM_n) plus your own lists, each with its own token name
+    DEFAULT = "CUSTOM"
+    cur_list = [DEFAULT]
     terms_card = card(led_row); terms_card.pack(side="right", fill="y", padx=(12, 0))
     th = clear(terms_card); th.pack(fill="x", padx=16, pady=(12, 8))
     tx(ctk.CTkLabel(th, font=F(12, "bold"), text_color=TEXT, anchor="w"), "terms_title").pack(side="left")
     terms_count = ctk.CTkLabel(th, text="", font=F(11), text_color=FAINT); terms_count.pack(side="right")
     MONO11, MONO12 = ctk.CTkFont(family=MONO, size=11), ctk.CTkFont(family=MONO, size=12)
+    list_row = clear(terms_card); list_row.pack(fill="x", padx=12, pady=(0, 6))
+    list_menu = ctk.CTkOptionMenu(list_row, values=[DEFAULT], command=lambda v: select_list(v), height=30, width=150,
+                                  corner_radius=8, fg_color=SURF2, button_color=SURF2, button_hover_color=SEL_H,
+                                  dropdown_fg_color=SURF2, dropdown_hover_color=SEL_H, dropdown_text_color=TEXT,
+                                  text_color=TEXT, font=MONO12, dropdown_font=MONO12, dynamic_resizing=False)
+    list_menu.pack(side="left", fill="x", expand=True)
+    btn(list_row, "list_new", lambda: new_list(), "outline", width=74, height=30).pack(side="right", padx=(6, 0))
+    tool_row = clear(terms_card); tool_row.pack(fill="x", padx=12, pady=(0, 4))
+    btn(tool_row, "list_import", lambda: import_list(), "secondary", width=128, height=28, size=11).pack(side="left")
+    del_btn = btn(tool_row, "list_delete", lambda: delete_list(), "danger", width=96, height=28, size=11)
+    del_btn.pack(side="right")
+    token_hint = ctk.CTkLabel(terms_card, text="", font=MONO11, text_color=FAINT, anchor="w", height=20)
+    token_hint.pack(fill="x", padx=16, pady=(0, 4))
     add_row = clear(terms_card); add_row.pack(fill="x", padx=12, pady=(0, 8))
     term_entry = ctk.CTkEntry(add_row, height=32, corner_radius=8, border_width=1, border_color=BORDER, fg_color=INK,
                               text_color=TEXT, font=MONO12, placeholder_text=T("terms_ph"),
@@ -2173,10 +2291,25 @@ def run_gui(agent):
                                  wraplength=262), "terms_hint")
     terms_hint.pack(fill="x", padx=16, pady=(8, 12))
 
-    def show_terms_count(): terms_count.configure(text=T("terms_count", n=len(agent.mapper.custom_terms)))
+    def lists(): return agent.mapper.custom_lists
+    def terms_of(name):
+        if name == DEFAULT: return list(agent.mapper.custom_terms)
+        return next((list(l["terms"]) for l in lists() if l["prefix"] == name), [])
+    def store_terms(name, terms):
+        if name == DEFAULT: agent.mapper.set_custom(terms)
+        else: agent.mapper.set_lists([dict(l, terms=terms) if l["prefix"] == name else l for l in lists()])
+    def refresh_lists():
+        names = [DEFAULT] + [l["prefix"] for l in lists()]
+        if cur_list[0] not in names: cur_list[0] = DEFAULT
+        list_menu.configure(values=names); list_menu.set(cur_list[0])
+        del_btn.configure(state="normal" if cur_list[0] != DEFAULT else "disabled")
+        token_hint.configure(text=T("list_tokens", p=cur_list[0]))
+    def select_list(name):
+        cur_list[0] = name; render_terms()
     def render_terms():
+        refresh_lists()
         for w in terms_view.winfo_children(): w.destroy()
-        terms = agent.mapper.custom_terms
+        terms = terms_of(cur_list[0])
         if not terms:
             ctk.CTkLabel(terms_view, text=T("terms_empty"), font=F(11), text_color=FAINT, wraplength=230,
                          justify="left", anchor="w").pack(fill="x", padx=8, pady=10)
@@ -2193,16 +2326,19 @@ def run_gui(agent):
                                text_color=TEXT)
             lbl.pack(side="left", fill="x", expand=True, pady=4)
             lbl.bind("<Double-Button-1>", lambda e, t=term: edit_term(t))
-        show_terms_count()
+        terms_count.configure(text=T("terms_count", n=len(terms)))
     retranslate.append(render_terms)
 
     def merged(raw):
-        """Current terms plus the new lines of raw (several lines = several terms). Returns (terms, added)."""
-        cur = list(agent.mapper.custom_terms); known = {t.casefold() for t in cur}; added = []
+        """Terms of the selected list plus the new lines of raw (several lines = several terms)."""
+        cur = terms_of(cur_list[0]); known = {t.casefold() for t in cur}; added = []
         for t in norm_terms(str(raw).splitlines()):
             if is_token(t) or t.casefold() in known: continue
             cur.append(t); known.add(t.casefold()); added.append(t)
         return cur, added
+    def added_note(added):
+        if len(added) > 1: return T("terms_added_n", n=len(added))
+        return T("term_added", s=added[0]) if cur_list[0] == DEFAULT else T("term_added_to", s=added[0], p=cur_list[0])
     def remask(note, implicit):
         if src.get("1.0", "end-1c").strip() and (not implicit or masked_out.get("1.0", "end-1c").strip()):
             show_page("tab_mask") if not implicit else None
@@ -2210,28 +2346,57 @@ def run_gui(agent):
         else:
             gui.flash(note, "ok")
     def set_terms(terms, note, implicit=True):
-        agent.mapper.set_custom(terms); render_terms()
+        store_terms(cur_list[0], terms); render_terms()
         if note: remask(note, implicit)
     def add_from_entry():
         cur, added = merged(term_entry.get())
         term_entry.delete(0, "end")
-        if added: set_terms(cur, T("term_added", s=added[0]) if len(added) == 1 else T("terms_added_n", n=len(added)))
+        if added: set_terms(cur, added_note(added))
     def remove_term(t):
-        set_terms([x for x in agent.mapper.custom_terms if x != t], T("term_removed", s=t))
+        set_terms([x for x in terms_of(cur_list[0]) if x != t], T("term_removed", s=t))
     def edit_term(t):
-        set_terms([x for x in agent.mapper.custom_terms if x != t], None)
+        set_terms([x for x in terms_of(cur_list[0]) if x != t], None)
         term_entry.delete(0, "end"); term_entry.insert(0, t); term_entry.focus_set()
     term_entry.bind("<Return>", lambda e: add_from_entry())
+
+    def new_list():
+        v = ctk.CTkInputDialog(text=T("list_new_q"), title=T("list_new_title")).get_input()
+        if v is None or not v.strip(): return
+        p = norm_prefix(v)
+        if not p: return gui.flash(T("list_bad"), "warn")
+        same = next((n for n in [DEFAULT] + [l["prefix"] for l in lists()] if n.lower() == p.lower()), None)
+        if same:
+            cur_list[0] = same
+        else:
+            agent.mapper.set_lists(lists() + [{"prefix": p, "terms": []}]); cur_list[0] = p
+            gui.flash(T("list_created", p=p), "ok")
+        render_terms(); term_entry.focus_set()
+    def delete_list():
+        name = cur_list[0]
+        if name == DEFAULT or not messagebox.askyesno(T("list_delete"), T("list_delete_q", p=name), parent=root):
+            return
+        agent.mapper.set_lists([l for l in lists() if l["prefix"] != name]); cur_list[0] = DEFAULT
+        render_terms(); remask(T("list_deleted", p=name), True)
+    def import_list():
+        p = filedialog.askopenfilename(parent=root, filetypes=TERM_FILETYPES)
+        if not p: return
+        try:
+            terms = read_term_file(p)
+        except Exception as ex:
+            return gui.flash(T("file_bad", name=os.path.basename(p), e=ex), "warn")
+        cur, added = merged("\n".join(terms))
+        if not added: return gui.flash(T("list_import_none"))
+        set_terms(cur, T("list_imported", n=len(added), p=cur_list[0]))
     render_terms()
 
     def add_selection(tb):
         term = norm_term(selection(tb))
         if not term: return gui.flash(T("term_need"), "warn")
-        if is_token(term): return gui.flash(T("term_token"), "warn")
+        if is_token(term) or agent.mapper._is_tok(term): return gui.flash(T("term_token"), "warn")
         cur, added = merged(term)
         if added:
-            agent.mapper.set_custom(cur); render_terms()
-        remask(T("term_added", s=term) if added else T("term_exists", s=term), implicit=False)
+            store_terms(cur_list[0], cur); render_terms()
+        remask(added_note(added) if added else T("term_exists", s=term), implicit=False)
         return "break"
     for tb in (src, masked_out):
         context_menu(tb, editable=(tb is src), add_term=lambda tb=tb: add_selection(tb))
@@ -2252,7 +2417,7 @@ def run_gui(agent):
     style.layout("Ledger.Treeview", [("Ledger.Treeview.treearea", {"sticky": "nswe"})])
     tree_wrap = clear(led_card); tree_wrap.pack(fill="both", expand=True, padx=(12, 6), pady=10)
     tree = ttk.Treeview(tree_wrap, columns=("type", "real", "fake"), show="headings", style="Ledger.Treeview")
-    for col, key, w in (("type", "col_type", 100), ("real", "col_real", 360), ("fake", "col_token", 360)):
+    for col, key, w in (("type", "col_type", 120), ("real", "col_real", 360), ("fake", "col_token", 360)):
         tree.column(col, width=w, anchor="w", stretch=(col != "type"))
         retranslate.append(lambda col=col, key=key: tree.heading(col, text=T(key), anchor="w"))
     tree.tag_configure("odd", background="#141A26")
@@ -2269,12 +2434,17 @@ def run_gui(agent):
             def _():
                 q = search.get().strip().lower()
                 tree.delete(*tree.get_children())
+                def kind(e):
+                    p = e["fake"].rsplit("_", 1)[0]
+                    if e["type"] == "custom" and p != "CUSTOM" and agent.mapper._is_tok(e["fake"]):
+                        return p
+                    return type_label(e["type"])
                 def shown(e):
                     return T("secret_shown", n=len(e["real"])) if e.get("secret") else e["real"]
                 rows = [e for e in agent.mapper.entries
                         if not q or q in shown(e).lower() or q in e["fake"].lower() or q in type_label(e["type"]).lower()]
                 for i, e in enumerate(reversed(rows)):
-                    tree.insert("", "end", values=(type_label(e["type"]), shown(e), e["fake"]),
+                    tree.insert("", "end", values=(kind(e), shown(e), e["fake"]),
                                 tags=("odd",) if i % 2 else ())
                 total = len(agent.mapper.entries)
                 ledcount.configure(text=T("rows_q", k=len(rows), n=total) if q else T("rows", n=total))

@@ -252,6 +252,36 @@ def check_custom_terms(engine):
     return problems
 
 
+def check_custom_lists(engine):
+    """Your own lists: own token name, upgrade from an earlier token, restore after reload and delete."""
+    problems = []
+    if [engine.norm_prefix(x) for x in ("vmachine_1", "VM 2", "vm2", "db-servers_01", "1abc", "çok")] != \
+       ["vmachine", "VM", "vm2", "db_servers", None, None]:
+        problems.append("prefix names not normalised")
+    store = os.path.join(tempfile.mkdtemp(), "ledger.json")
+    m = engine.Mapper(store=store)
+    m.anonymize("ssh alice@app-vm-01 then ping 10.20.30.40")
+    m.set_lists([{"prefix": "vmachine_1", "terms": ["app-vm-01", "db-vm-02"]},
+                 {"prefix": "dcip", "terms": ["10.20.30.40"]}, {"prefix": "vmachine", "terms": ["web-vm-03"]}])
+    if [l["prefix"] for l in m.custom_lists] != ["vmachine", "dcip"]: problems.append("lists not merged by name")
+    txt = "app-vm-01 talks to db-vm-02 and web-vm-03 at 10.20.30.40; APP-VM-01 too"
+    want = "vmachine_1 talks to vmachine_2 and vmachine_3 at dcip_1; vmachine_4 too"
+    out, _ = m.anonymize(txt)
+    if out != want: problems.append("list tokens:\n  got  %s\n  want %s" % (out, want))
+    if m.anonymize(out)[0] != out: problems.append("masking twice changed list tokens")
+    if m.restore("restart vmachine_2, not vmachine_20")[0] != "restart db-vm-02, not vmachine_20":
+        problems.append("list token restore")
+    if m.restore("HOST_1")[0] != "app-vm-01": problems.append("earlier token no longer restores")
+    m2 = engine.Mapper(store=store)
+    if m2.restore(out)[0] != txt: problems.append("list tokens lost after reload")
+    m2.set_lists([])
+    m3 = engine.Mapper(store=store)
+    if m3.restore(out)[0] != txt or m3.legacy_count(): problems.append("deleted list no longer restores")
+    if m3.anonymize("new box: cache-vm-09", {"hostname": False})[0] != "new box: cache-vm-09":
+        problems.append("deleted list still masks")
+    return problems
+
+
 def check_syntax_colours(engine):
     """Display colours: log levels, strings and keys are found; English words in a log stay plain."""
     log = "2026-10-01 10:00:00 ERROR login failed for alice in 5s, user=bob\n"
@@ -294,7 +324,7 @@ CHECKS = (("consistency across messages", check_consistency), ("Windows line end
           ("password keys in several languages", check_password_languages),
           ("token boundaries", check_token_boundaries), ("domain and URL tokens", check_urls_and_domains),
           ("national ID (T.C. kimlik no)", check_national_id), ("custom terms", check_custom_terms),
-          ("syntax colours", check_syntax_colours), ("classify + restore", check_classify))
+          ("custom lists", check_custom_lists), ("syntax colours", check_syntax_colours), ("classify + restore", check_classify))
 
 
 # ---- pytest entry points ----

@@ -219,6 +219,36 @@ function checkCustomTerms(E) {
   return problems;
 }
 
+function checkCustomLists(E) {
+  const problems = [];
+  const names = ["vmachine_1", "VM 2", "vm2", "db-servers_01", "1abc", "çok"].map(E.normPrefix);
+  if (JSON.stringify(names) !== JSON.stringify(["vmachine", "VM", "vm2", "db_servers", null, null]))
+    problems.push("prefix names not normalised: " + JSON.stringify(names));
+  let saved = null;
+  const storage = { load: () => saved && JSON.parse(saved), save: d => { saved = JSON.stringify(d); } };
+  const m = new E.Mapper(storage);
+  m.anonymize("ssh alice@app-vm-01 then ping 10.20.30.40");
+  m.setLists([{ prefix: "vmachine_1", terms: ["app-vm-01", "db-vm-02"] },
+              { prefix: "dcip", terms: ["10.20.30.40"] }, { prefix: "vmachine", terms: ["web-vm-03"] }]);
+  if (m.customLists.map(l => l.prefix).join() !== "vmachine,dcip") problems.push("lists not merged by name");
+  const txt = "app-vm-01 talks to db-vm-02 and web-vm-03 at 10.20.30.40; APP-VM-01 too";
+  const want = "vmachine_1 talks to vmachine_2 and vmachine_3 at dcip_1; vmachine_4 too";
+  const [out] = m.anonymize(txt);
+  if (out !== want) problems.push("list tokens:\n  got  " + out + "\n  want " + want);
+  if (m.anonymize(out)[0] !== out) problems.push("masking twice changed list tokens");
+  if (m.restore("restart vmachine_2, not vmachine_20")[0] !== "restart db-vm-02, not vmachine_20")
+    problems.push("list token restore");
+  if (m.restore("HOST_1")[0] !== "app-vm-01") problems.push("earlier token no longer restores");
+  const m2 = new E.Mapper(storage);
+  if (m2.restore(out)[0] !== txt) problems.push("list tokens lost after reload");
+  m2.setLists([]);
+  const m3 = new E.Mapper(storage);
+  if (m3.restore(out)[0] !== txt || m3.legacyCount()) problems.push("deleted list no longer restores");
+  if (m3.anonymize("new box: cache-vm-09", { hostname: false })[0] !== "new box: cache-vm-09")
+    problems.push("deleted list still masks");
+  return problems;
+}
+
 function checkClassify(E) {
   const m = new E.Mapper(null), problems = [];
   m.anonymize("kemal@web01:~$ ping 10.10.10.20");
@@ -235,7 +265,7 @@ const CHECKS = [["consistency across messages", checkConsistency], ["Windows lin
   ["upgrade from older ledgers", checkLegacyUpgrade], ["key formats (Stripe, GitHub, AWS…)", checkSecretFormats],
   ["password keys in several languages", checkPasswordLanguages], ["token boundaries", checkTokenBoundaries],
   ["domain and URL tokens", checkUrlsAndDomains], ["national ID (T.C. kimlik no)", checkNationalId],
-  ["custom terms", checkCustomTerms], ["classify + restore", checkClassify]];
+  ["custom terms", checkCustomTerms], ["custom lists", checkCustomLists], ["classify + restore", checkClassify]];
 
 function main() {
   const E = loadEngine(process.argv[2]);

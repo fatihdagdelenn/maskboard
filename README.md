@@ -53,6 +53,7 @@ or browser language, and you can switch between them at any time.
 | `PASSWORD_n`, `TOKEN_n`, `SECRET_n` | Passwords, tokens, private keys | `password: Hunter2!` → `password: PASSWORD_1` |
 | `DATE_n` | Dates (optional) | `2026-10-01` → `DATE_1` |
 | `CUSTOM_n` | Terms from your custom terms list | `ACME Ltd.` → `CUSTOM_1` |
+| *your name*`_n` | Terms from a list you named yourself | `app-vm-01` → `vmachine_1` |
 
 Tokens are deliberately not wrapped in `<…>`. Chat interfaces render answers as HTML, so
 `<url1>` can disappear on screen, and it looks like a tag inside XML configs. A plain
@@ -340,6 +341,27 @@ in the list masks the input again too.
 - A term inside an ordinary word is ignored: `net` does not touch `network` or `dotnet`.
 - Longer terms win over shorter ones when they overlap.
 
+### Your own lists
+
+For names you want to recognise in the AI's answer, such as virtual machines, servers or your
+own IP addresses, make a list with **+ List** and give it a name. The name becomes the token:
+a list called `vmachine` turns its terms into `vmachine_1`, `vmachine_2` … and a list `dcip`
+turns `10.20.30.40` into `dcip_1`. Typing `vmachine_1` as the name works too; the number is
+dropped. Names use the letters A–Z, digits and `_` and start with a letter.
+
+**Import list…** fills the selected list from a file: a `.txt` with one term per line (lines
+starting with `#` are skipped) or a `.csv` / `.tsv`, from which the first column is taken and a
+header row such as `Name` is skipped, so a VM export from your hypervisor can be used as is.
+The list selector switches between lists; `Alt+M` and the right-click menu add to the selected
+one.
+
+- A value that already had another token (for example `HOST_3`) gets the list's token from now
+  on; the old token keeps restoring, so earlier AI answers still work.
+- **Delete list** removes the list; its terms are no longer looked for (other rules may still
+  catch some of them, such as hostnames). Tokens it already gave out keep restoring.
+- Lists are saved with the ledger and included when it is exported; importing a ledger merges
+  its lists into yours.
+
 ## Upgrading from ClipVeil or Anonim Ajan
 
 MaskBoard was previously called *ClipVeil* and, before that, *Anonim Ajan*. The upgrade is
@@ -390,7 +412,7 @@ Further checks cover:
 - key formats;
 - password words in several languages;
 - token boundaries;
-- national ID check digits and custom-term matching, including multi-word terms;
+- national ID check digits and custom-term matching, including multi-word terms and your own named lists;
 - URL and domain rules;
 - the log / AI answer classification.
 

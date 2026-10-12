@@ -232,6 +232,14 @@
     color:var(--text-dim)}
   .terms-head b{color:var(--text);font-weight:600}
   .terms-head span{font-family:var(--mono);font-size:11px;color:var(--text-faint)}
+  .term-lists,.term-tools{display:flex;gap:7px;margin-bottom:7px}
+  .term-tools{justify-content:space-between}
+  .term-lists select{flex:1;min-width:0;background:var(--panel-2);color:var(--text);border:1px solid var(--line);
+    border-radius:7px;padding:6px 8px;font-family:var(--mono);font-size:12.5px;outline:none}
+  .term-lists select:focus{border-color:var(--act)}
+  .mini.danger{color:var(--real);border-color:rgba(242,89,106,.35)}
+  .mini.danger:hover{border-color:var(--real);color:var(--real)}
+  .term-tokens{font-family:var(--mono);font-size:11px;color:var(--text-faint);margin:0 2px 7px}
   .term-add{display:flex;gap:7px}
   .term-add input{flex:1;min-width:0;background:var(--ink);color:var(--text);border:1px solid var(--line);border-radius:7px;
     padding:7px 10px;font-family:var(--mono);font-size:12.5px;outline:none}
@@ -269,7 +277,7 @@
     <div class="brand">
       <div class="logo" aria-hidden="true"></div>
       <div>
-        <h1>MaskBoard <span class="ver">v1.2.0</span></h1>
+        <h1>MaskBoard <span class="ver">v1.3.0</span></h1>
         <div class="sub" data-i18n="tagline"></div>
       </div>
     </div>
@@ -374,6 +382,16 @@
         </label>
         <div class="terms">
           <div class="terms-head"><b data-i18n="terms_title"></b><span id="termCount"></span></div>
+          <div class="term-lists">
+            <select id="termListSel" aria-label="List"></select>
+            <button class="ghost mini" id="btnNewList" data-i18n="list_new"></button>
+          </div>
+          <div class="term-tools">
+            <button class="ghost mini" id="btnImportList" data-i18n="list_import"></button>
+            <button class="ghost mini danger" id="btnDelList" data-i18n="list_delete"></button>
+            <input type="file" id="fileTerms" accept=".txt,.csv,.tsv,.list,.lst,text/plain,text/csv" hidden>
+          </div>
+          <div class="term-tokens" id="termTokens"></div>
           <div class="term-add">
             <input id="termInput" spellcheck="false" autocomplete="off" data-i18n-ph="terms_ph">
             <button class="ghost mini" id="btnAddTerm" data-i18n="terms_add"></button>
@@ -439,13 +457,22 @@ const MaskBoardEngine = (function () {
   const TOKEN_PREFIXES = ["NATIONAL_ID", "IPV6_PRIV", "IPV6_PUB", "IP_PRIV", "IP_PUB", "CONTAINER", "PASSWORD", "PROJECT",
     "DOMAIN", "SCHEMA", "SECRET", "CONFIG", "CUSTOM", "TOKEN", "IFACE", "HOST", "MAIL", "JNDI", "USER",
     "DATE", "URL", "MAC", "DS", "DB"].concat([...LEGACY_PREFIXES].sort());
-  const TOKEN_ALT = TOKEN_PREFIXES.slice().sort((a, b) => b.length - a.length).join("|");
   // Not part of a word (MYDB_1) or of an UPPER_CASE identifier (DB_HOST_1); IP_1 ≠ IP_10.
-  const TOKEN_SRC = "(?<![A-Za-z0-9])(?<![A-Z]_)(?:" + TOKEN_ALT + ")_\\d+(?!\\d)";
+  const tokenSrc = prefixes => "(?<![A-Za-z0-9])(?<![A-Z]_)(?:" +
+    [...new Set(prefixes)].sort((a, b) => (b.length - a.length) || (a < b ? -1 : a > b ? 1 : 0)).map(esc).join("|") +
+    ")_\\d+(?!\\d)";
+  const TOKEN_SRC = tokenSrc(TOKEN_PREFIXES);
   const TOKEN_RE = G(TOKEN_SRC);
   const TOKEN_AT = new RegExp(TOKEN_SRC, "uy");
   const TOKEN_FULL = FULL(TOKEN_SRC);
   const isToken = s => TOKEN_FULL.test(s || "");
+  // Your own term lists get your own token name: a "vmachine" list gives vmachine_1, vmachine_2 …
+  const PREFIX_FULL = /^[A-Za-z][A-Za-z0-9_]{0,31}$/;
+  /** 'vmachine_1' or 'vmachine' → 'vmachine'; spaces and dashes become '_'. null if unusable. */
+  function normPrefix(p) {
+    p = String(p || "").trim().replace(/[\s\-]+/gu, "_").replace(/(?:_\d+)+$/, "").replace(/_+$/, "");
+    return PREFIX_FULL.test(p) ? p : null;
+  }
 
   const TYPE_PREFIX = { mac: "MAC", hostname: "HOST", domain: "DOMAIN", email: "MAIL", date: "DATE",
     custom: "CUSTOM", user: "USER", container: "CONTAINER", project: "PROJECT", iface: "IFACE", url: "URL", natid: "NATIONAL_ID" };
@@ -907,6 +934,17 @@ const MaskBoardEngine = (function () {
     for (const t of (terms || []).map(normTerm)) if (t && !out.includes(t)) out.push(t);
     return out;
   }
+  function normLists(lists) {
+    const out = new Map();
+    for (const l of lists || []) {
+      const p = normPrefix((l || {}).prefix);
+      if (!p) continue;
+      const key = p.toLowerCase();
+      if (!out.has(key)) out.set(key, { prefix: p, terms: [] });
+      out.get(key).terms = normTerms(out.get(key).terms.concat(l.terms || []));
+    }
+    return [...out.values()];
+  }
   function termRe(term) {
     let src = "";
     for (const ch of term) {
@@ -945,33 +983,55 @@ const MaskBoardEngine = (function () {
     /** storage: {load() → object|null, save(object)}, or null to stay in memory */
     constructor(storage) {
       this.storage = storage || null;
-      this._reset();
       this.customTerms = [];
+      this.customLists = [];             // [{prefix: "vmachine", terms: [...]}]
+      this._reset();
       this.load();
     }
     _reset() {
       this.entries = []; this.realToFake = new Map(); this.byReal = new Map();
       this.secretMap = new Map(); this.tok = new Map(); this.counters = new Map();
+      this._extra = new Set();           // token prefixes of your own lists found in the ledger
+      this._tre = [null, TOKEN_RE, TOKEN_FULL];
+    }
+    _listPrefixes() { return new Set(this.customLists.map(l => l.prefix)); }
+    /** TOKEN_RE plus the prefixes of your own lists (also of deleted ones still in the ledger) */
+    tokenRe() { return this._tokenRes()[0]; }
+    _tokenRes() {
+      const extra = [...new Set([...this._extra, ...this._listPrefixes()])].sort();
+      const key = extra.join(" ");
+      if (key !== this._tre[0]) {
+        const src = extra.length ? tokenSrc(TOKEN_PREFIXES.concat(extra)) : TOKEN_SRC;
+        this._tre = [key, extra.length ? G(src) : TOKEN_RE, extra.length ? FULL(src) : TOKEN_FULL];
+      }
+      return [this._tre[1], this._tre[2]];
+    }
+    _isTok(s) { return this._tokenRes()[1].test(s || ""); }
+    _notePrefix(e) {
+      if (e.type !== "custom") return;
+      const mm = /^([A-Za-z][A-Za-z0-9_]*)_\d+$/.exec(e.fake || "");
+      if (mm && !TOKEN_PREFIXES.includes(mm[1])) this._extra.add(mm[1]);
     }
     _token(prefix) {
       const n = (this.counters.get(prefix) || 0) + 1;
       this.counters.set(prefix, n);
       return prefix + "_" + n;
     }
-    static _shouldUpgrade(old, prefix) {
-      if (!isToken(old)) return true;
+    _shouldUpgrade(old, prefix, typ) {
+      if (!this._isTok(old)) return true;
       const op = old.slice(0, old.lastIndexOf("_"));
       if (op === prefix) return false;
-      if (LEGACY_PREFIXES.has(op)) return true;
+      if (LEGACY_PREFIXES.has(op) || (typ === "custom" && this._listPrefixes().has(prefix))) return true;
       return op === "HOST" && ["IFACE", "CONTAINER", "PROJECT", "USER"].includes(prefix);
     }
     _register(real, typ, prefix, secret = false, prop = false) {
       const m = secret ? this.secretMap : this.realToFake;
-      if (m.has(real) && !(!secret && Mapper._shouldUpgrade(m.get(real), prefix))) {
+      if (m.has(real) && !(!secret && this._shouldUpgrade(m.get(real), prefix, typ))) {
         if (prop && !secret && this.byReal.has(real)) this.byReal.get(real).prop = true;
         return m.get(real);
       }
       const t = this._token(prefix);
+      if (!TOKEN_PREFIXES.includes(prefix)) this._extra.add(prefix);
       m.set(real, t); this.tok.set(t, real);
       const e = { real, fake: t, type: typ };
       if (secret) e.secret = true;
@@ -1177,10 +1237,10 @@ const MaskBoardEngine = (function () {
       }
 
       // 8) custom terms (case-insensitive) and national IDs
-      for (const term of this.customTerms.filter(t => t).sort((a, b) => b.length - a.length))
+      for (const [term, prefix] of this._termPrefixes())
         for (const m of all(termRe(term), text)) {
           const span = customSpan(text, m.index, m.index + m[0].length);
-          if (span) add(span[0], span[1], text.slice(span[0], span[1]), "custom");
+          if (span) add(span[0], span[1], text.slice(span[0], span[1]), "custom", prefix);
         }
       for (const m of all(NATID_RE, text)) if (natidOk(m[0])) add(m.index, m.index + m[0].length, m[0], "natid");
 
@@ -1210,7 +1270,7 @@ const MaskBoardEngine = (function () {
           if (urlKind(v, text) === "mask") add(m.index, m.index + v.length, v, "url");
         }
       }
-      const protectedSpans = all(TOKEN_RE, text).map(m => [m.index, m.index + m[0].length]);
+      const protectedSpans = all(this.tokenRe(), text).map(m => [m.index, m.index + m[0].length]);
       if (on("hostname")) {
         const seen = new Set();
         for (const m of all(KW_RE, text)) {
@@ -1285,11 +1345,11 @@ const MaskBoardEngine = (function () {
     }
     /** ["restore"|"anon", known tokens, new sensitive values]: restore only if known tokens dominate */
     classify(text, opts) {
-      const known = all(TOKEN_RE, text).filter(m => this.tok.has(m[0])).length;
+      const known = all(this.tokenRe(), text).filter(m => this.tok.has(m[0])).length;
       const n = this._collect(text, opts).length;
       return [known > 0 && known >= n ? "restore" : "anon", known, n];
     }
-    legacyCount() { return this.entries.filter(e => !isToken(e.fake)).length; }
+    legacyCount() { return this.entries.filter(e => !this._isTok(e.fake)).length; }
     static _guard(typ) {
       if (typ === "ipv4") return ["(?<![0-9.])", "(?![0-9.])"];
       if (typ === "ipv6" || typ === "mac") return ["(?<![0-9A-Fa-f:.\\-])", "(?![0-9A-Fa-f:.\\-])"];
@@ -1299,8 +1359,8 @@ const MaskBoardEngine = (function () {
     restore(text, wrap) {
       let count = 0;
       const w = wrap || (r => r);
-      text = text.replace(TOKEN_RE, t => { const r = this.tok.get(t); if (r === undefined) return t; count++; return w(r); });
-      const legacy = this.entries.filter(e => !isToken(e.fake)).sort((a, b) => b.fake.length - a.fake.length);
+      text = text.replace(this.tokenRe(), t => { const r = this.tok.get(t); if (r === undefined) return t; count++; return w(r); });
+      const legacy = this.entries.filter(e => !this._isTok(e.fake)).sort((a, b) => b.fake.length - a.fake.length);
       for (const p of legacy) {
         const [lb, la] = Mapper._guard(p.type);
         text = text.replace(G(lb + esc(p.fake) + la), () => { count++; return w(p.real); });
@@ -1311,7 +1371,7 @@ const MaskBoardEngine = (function () {
     /** ledger as stored and exported; never contains secrets */
     exportData() {
       return { version: 3, entries: this.exportEntries(), counters: Object.fromEntries(this.counters),
-               custom_terms: this.customTerms };
+               custom_terms: this.customTerms, custom_lists: this.customLists };
     }
     importEntries(items) {
       let added = 0;
@@ -1319,8 +1379,9 @@ const MaskBoardEngine = (function () {
         const real = e.real, fake = e.fake;
         if (!real || !fake || e.secret || this.realToFake.has(real) || this.tok.has(fake)) continue;
         const ne = { real, fake, type: e.type || "custom" }; if (e.prop) ne.prop = true;
+        this._notePrefix(ne);
         this.realToFake.set(real, fake); this.tok.set(fake, real); this.entries.push(ne); this.byReal.set(real, ne);
-        if (isToken(fake)) {
+        if (this._isTok(fake)) {
           const p = fake.slice(0, fake.lastIndexOf("_")), n = +fake.slice(fake.lastIndexOf("_") + 1);
           this.counters.set(p, Math.max(this.counters.get(p) || 0, n));
         }
@@ -1330,6 +1391,17 @@ const MaskBoardEngine = (function () {
       return added;
     }
     setCustom(terms) { this.customTerms = normTerms(terms); this.save(); }
+    /** your own term lists: [{prefix: "vmachine", terms: [...]}]; same prefix → one list */
+    setLists(lists) { this.customLists = normLists(lists); this.save(); }
+    /** [term, prefix] longest first; a term in one of your lists wins over the plain custom list */
+    _termPrefixes() {
+      const seen = new Set(), out = [];
+      for (const l of this.customLists) for (const t of l.terms)
+        if (!seen.has(t.toLowerCase())) { seen.add(t.toLowerCase()); out.push([t, l.prefix]); }
+      for (const t of this.customTerms)
+        if (!seen.has(t.toLowerCase())) { seen.add(t.toLowerCase()); out.push([t, null]); }
+      return out.sort((a, b) => b[0].length - a[0].length);
+    }
     save() {
       if (!this.storage) return;
       try {
@@ -1342,13 +1414,15 @@ const MaskBoardEngine = (function () {
       try { d = this.storage.load(); } catch (e) { d = null; }
       if (!d) return;
       this.customTerms = normTerms(d.custom_terms);
+      this.customLists = normLists(d.custom_lists);
       for (const [k, v] of Object.entries(d.counters || {})) this.counters.set(k, +v);
       for (const e of d.entries || []) {
         if (e.secret || !e.real || !e.fake) continue;
         const ne = { real: e.real, fake: e.fake, type: e.type || "custom" }; if (e.prop) ne.prop = true;
+        this._notePrefix(ne);
         this.entries.push(ne);
         if (!this.realToFake.has(e.real)) { this.realToFake.set(e.real, e.fake); this.byReal.set(e.real, ne); }
-        if (isToken(e.fake)) {
+        if (this._isTok(e.fake)) {
           this.tok.set(e.fake, e.real);
           const p = e.fake.slice(0, e.fake.lastIndexOf("_")), n = +e.fake.slice(e.fake.lastIndexOf("_") + 1);
           this.counters.set(p, Math.max(this.counters.get(p) || 0, n));
@@ -1358,7 +1432,7 @@ const MaskBoardEngine = (function () {
     clear() { this._reset(); this.save(); }
   }
 
-  return { Mapper, TOKEN_RE, ALL_TYPES, DEFAULT_OFF, defaultOpts, isToken, normTerm, normTerms,
+  return { Mapper, TOKEN_RE, ALL_TYPES, DEFAULT_OFF, defaultOpts, isToken, normTerm, normTerms, normPrefix, normLists,
            setMaskSystemUsers: v => { MASK_SYSTEM_USERS = !!v; } };
 })();
 /* ENGINE END */
@@ -1394,7 +1468,13 @@ const MaskBoardEngine = (function () {
       terms_title: "Custom terms", terms_count: "{n} terms", terms_count_1: "1 term", terms_ph: "New term — Enter adds it",
       terms_add: "Add", terms_empty: "No custom terms yet. Type one above, or select text in the input and press <kbd>Alt</kbd>+<kbd>M</kbd>.",
       t_terms_added_n: "{n} custom terms added", t_term_removed: "Removed from custom terms: {s}", term_edit: "Double-click to edit", term_remove: "Remove",
-      terms_hint: "Company, product or project names — long phrases too. Matched as whole words and identifier parts (<code>ACME_Prod</code>, <code>AcmeUser</code>); case, Turkish letters and extra spaces are ignored. Pasting several lines adds each one; double-click a term to edit it, × removes it. Select text in the input and press <kbd>Alt</kbd>+<kbd>M</kbd> or right-click to add it.",
+      list_new: "+ List", list_import: "Import list…", list_delete: "Delete list", list_tokens: "Tokens: {p}_1, {p}_2 …",
+      list_new_q: "Name of the list — it becomes the token name (vmachine → vmachine_1, vmachine_2 …). Letters A–Z, digits and _, starting with a letter.",
+      t_list_bad: "That name can't be used: letters A–Z, digits and _, starting with a letter.",
+      t_list_created: "List {p} created — its terms become {p}_1, {p}_2 …",
+      list_delete_q: "Delete the list {p}? Tokens it already gave out keep restoring.", t_list_deleted: "List {p} deleted",
+      t_list_imported: "{n} terms imported into {p}", t_list_import_none: "No new terms in that file.", t_term_added_to: "Added to {p}: {s}",
+      terms_hint: "Company, product or project names — long phrases too. Matched as whole words and identifier parts (<code>ACME_Prod</code>, <code>AcmeUser</code>); case, Turkish letters and extra spaces are ignored. Pasting several lines adds each one; double-click a term to edit it, × removes it. Select text in the input and press <kbd>Alt</kbd>+<kbd>M</kbd> or right-click to add it to the selected list. For your own names (VMs, servers, IP addresses) make a list with <b>+ List</b>: its name becomes the token (<code>vmachine_1</code>). <b>Import list</b> fills it from a .txt (one per line) or .csv (first column).",
       ctx_add: "Add “{s}” to custom terms", ctx_cut: "Cut", ctx_copy: "Copy", ctx_note: "Shift + right-click opens the browser menu",
       t_term_need: "Select a word or phrase first.", t_term_token: "That is already a token.",
       t_term_added: "Added to custom terms: {s}", t_term_exists: "Already a custom term: {s}",
@@ -1450,7 +1530,13 @@ const MaskBoardEngine = (function () {
       terms_title: "Özel terimler", terms_count: "{n} terim", terms_count_1: "1 terim", terms_ph: "Yeni terim — Enter ile ekle",
       terms_add: "Ekle", terms_empty: "Henüz özel terim yok. Yukarıya yaz ya da girişte metni seçip <kbd>Alt</kbd>+<kbd>M</kbd>'ye bas.",
       t_terms_added_n: "{n} özel terim eklendi", t_term_removed: "Özel terimlerden çıkarıldı: {s}", term_edit: "Düzenlemek için çift tıkla", term_remove: "Sil",
-      terms_hint: "Firma, ürün ya da proje adları — uzun ifadeler de olur. Tam kelime ve tanımlayıcı parçası olarak bulunur (<code>ACME_Prod</code>, <code>AcmeUser</code>); büyük/küçük harf, Türkçe harfler ve fazla boşluklar önemsizdir. Birden çok satır yapıştırırsan her satır ayrı terim olur; düzenlemek için terime çift tıkla, × siler. Girişte metni seçip <kbd>Alt</kbd>+<kbd>M</kbd>'ye bas ya da sağ tıklayıp ekle.",
+      list_new: "+ Liste", list_import: "Liste içe aktar…", list_delete: "Listeyi sil", list_tokens: "Etiketler: {p}_1, {p}_2 …",
+      list_new_q: "Listenin adı — etiket adı olur (vmachine → vmachine_1, vmachine_2 …). A–Z harfleri, rakam ve _; harfle başlamalı.",
+      t_list_bad: "Bu ad kullanılamaz: A–Z harfleri, rakam ve _; harfle başlamalı.",
+      t_list_created: "{p} listesi oluşturuldu — terimleri {p}_1, {p}_2 … olur",
+      list_delete_q: "{p} listesi silinsin mi? Daha önce verdiği etiketler geri çevrilmeye devam eder.", t_list_deleted: "{p} listesi silindi",
+      t_list_imported: "{p} listesine {n} terim aktarıldı", t_list_import_none: "Dosyada yeni terim yok.", t_term_added_to: "{p} listesine eklendi: {s}",
+      terms_hint: "Firma, ürün ya da proje adları — uzun ifadeler de olur. Tam kelime ve tanımlayıcı parçası olarak bulunur (<code>ACME_Prod</code>, <code>AcmeUser</code>); büyük/küçük harf, Türkçe harfler ve fazla boşluklar önemsizdir. Birden çok satır yapıştırırsan her satır ayrı terim olur; düzenlemek için terime çift tıkla, × siler. Girişte metni seçip <kbd>Alt</kbd>+<kbd>M</kbd>'ye bas ya da sağ tıklayıp seçili listeye ekle. Kendi adların (VM, sunucu, IP adresi) için <b>+ Liste</b> ile liste aç: adı etiket adı olur (<code>vmachine_1</code>). <b>Liste içe aktar</b> onu .txt (her satıra bir terim) ya da .csv (ilk sütun) dosyasından doldurur.",
       ctx_add: "“{s}” özel terimlere ekle", ctx_cut: "Kes", ctx_copy: "Kopyala", ctx_note: "Shift + sağ tık tarayıcı menüsünü açar",
       t_term_need: "Önce bir kelime ya da ifade seç.", t_term_token: "Bu zaten bir etiket.",
       t_term_added: "Özel terimlere eklendi: {s}", t_term_exists: "Zaten özel terimlerde: {s}",
@@ -1634,7 +1720,7 @@ const MaskBoardEngine = (function () {
   function highlightTokens(text) {
     if (text.length > HIGHLIGHT_MAX) return esc(text);
     const idx = new Map(m.entries.map(e => [e.fake, e])), marks = [];
-    for (const tk of text.matchAll(E.TOKEN_RE)) {
+    for (const tk of text.matchAll(m.tokenRe())) {
       const e = idx.get(tk[0]);
       if (!e) continue;
       const real = e.secret ? MASK : e.real;
@@ -1765,9 +1851,83 @@ const MaskBoardEngine = (function () {
     const sel = window.getSelection();
     return sel && sel.rangeCount && el.contains(sel.anchorNode) ? sel.toString() : "";
   }
-  /** current terms plus the lines of raw (several lines = several terms) → [terms, added] */
+  // term lists: CUSTOM (default, CUSTOM_n) plus your own lists, each with its own token name
+  const DEFAULT_LIST = "CUSTOM";
+  let curList = DEFAULT_LIST;
+  const termsOf = name => name === DEFAULT_LIST ? m.customTerms.slice()
+    : ((m.customLists.find(l => l.prefix === name) || {}).terms || []).slice();
+  function storeTerms(name, terms) {
+    if (name === DEFAULT_LIST) m.setCustom(terms);
+    else m.setLists(m.customLists.map(l => l.prefix === name ? { prefix: l.prefix, terms } : l));
+  }
+  function renderLists() {
+    const names = [DEFAULT_LIST].concat(m.customLists.map(l => l.prefix));
+    if (!names.includes(curList)) curList = DEFAULT_LIST;
+    $("termListSel").innerHTML = names.map(n => `<option>${esc(n)}</option>`).join("");
+    $("termListSel").value = curList;
+    $("btnDelList").disabled = curList === DEFAULT_LIST;
+    $("termTokens").textContent = t("list_tokens", { p: curList });
+  }
+  const addedNote = added => added.length > 1 ? t("t_terms_added_n", { n: added.length })
+    : curList === DEFAULT_LIST ? t("t_term_added", { s: added[0] }) : t("t_term_added_to", { s: added[0], p: curList });
+  const TERM_HEADER = /^(?:vm|vm ?name|names?|host ?names?|hosts?|servers?|machines?|ips?|ip ?address(?:es)?|address(?:es)?|terms?|values?|items?)$/i;
+  function firstCell(line, d) {
+    line = line.trim();
+    if (!line.startsWith('"')) return line.split(d)[0].trim();
+    let out = "", i = 1;
+    for (; i < line.length; i++) {
+      if (line[i] === '"') { if (line[i + 1] === '"') { out += '"'; i++; } else break; } else out += line[i];
+    }
+    return out.trim();
+  }
+  /** terms from a file: one per line (# comments skipped); .csv/.tsv: the first column, header row skipped */
+  function termsFromFile(name, text) {
+    const lines = text.split(/\r\n|\r|\n/).filter(l => l.trim() && !l.trimStart().startsWith("#"));
+    const ext = ((name.match(/\.[^.]+$/) || [""])[0]).toLowerCase();
+    if ((ext === ".csv" || ext === ".tsv") && lines.length) {
+      const d = ext === ".tsv" ? "\t" : [",", ";", "\t", "|"].reduce((a, b) => lines[0].split(b).length > lines[0].split(a).length ? b : a);
+      let vals = lines.map(l => firstCell(l, d)).filter(Boolean);
+      if (vals.length && TERM_HEADER.test(vals[0])) vals = vals.slice(1);
+      return E.normTerms(vals);
+    }
+    return E.normTerms(lines);
+  }
+  $("termListSel").onchange = e => { curList = e.target.value; renderTerms(); };
+  $("btnNewList").onclick = () => {
+    const v = prompt(t("list_new_q"));
+    if (v === null || !v.trim()) return;
+    const p = E.normPrefix(v);
+    if (!p) { toast(t("t_list_bad")); return; }
+    const same = [DEFAULT_LIST].concat(m.customLists.map(l => l.prefix)).find(n => n.toLowerCase() === p.toLowerCase());
+    if (same) curList = same;
+    else { m.setLists(m.customLists.concat([{ prefix: p, terms: [] }])); curList = p; toast(t("t_list_created", { p })); }
+    renderTerms(); $("termInput").focus();
+  };
+  $("btnDelList").onclick = () => {
+    const name = curList;
+    if (name === DEFAULT_LIST || !confirm(t("list_delete_q", { p: name }))) return;
+    m.setLists(m.customLists.filter(l => l.prefix !== name)); curList = DEFAULT_LIST;
+    setTerms(termsOf(curList), t("t_list_deleted", { p: name }));
+  };
+  $("btnImportList").onclick = () => $("fileTerms").click();
+  $("fileTerms").onchange = e => {
+    const file = e.target.files[0]; e.target.value = "";
+    if (!file) return;
+    const r = new FileReader();
+    r.onload = () => {
+      const bytes = new Uint8Array(r.result);
+      let text;
+      try { text = new TextDecoder("utf-8", { fatal: true }).decode(bytes); }
+      catch (_) { text = new TextDecoder("windows-1254").decode(bytes); }
+      const [cur, added] = mergedTerms(termsFromFile(file.name, text).join("\n"));
+      if (!added.length) { toast(t("t_list_import_none")); return; }
+      setTerms(cur, t("t_list_imported", { n: added.length, p: curList }));
+    };
+    r.readAsArrayBuffer(file);
+  };
+  /** terms of the selected list plus the lines of raw (several lines = several terms) → [terms, added] */
   function mergedTerms(raw) {
-    const cur = m.customTerms.slice(), known = new Set(cur.map(x => x.toLowerCase())), added = [];
+    const cur = termsOf(curList), known = new Set(cur.map(x => x.toLowerCase())), added = [];
     for (const x of E.normTerms(String(raw).split(/\r?\n/))) {
       if (E.isToken(x) || known.has(x.toLowerCase())) continue;
       cur.push(x); known.add(x.toLowerCase()); added.push(x);
@@ -1775,7 +1935,8 @@ const MaskBoardEngine = (function () {
     return [cur, added];
   }
   function renderTerms() {
-    const list = $("termList"), terms = m.customTerms;
+    renderLists();
+    const list = $("termList"), terms = termsOf(curList);
     const n = terms.length;
     $("termCount").textContent = t(n === 1 ? "terms_count_1" : "terms_count", { n });
     if (!n) { list.innerHTML = `<li class="empty-term">${t("terms_empty")}</li>`; return; }
@@ -1785,14 +1946,14 @@ const MaskBoardEngine = (function () {
   }
   /** change the list; re-mask when there is a masked output to keep in step */
   function setTerms(terms, note) {
-    m.setCustom(terms); renderTerms();
+    storeTerms(curList, terms); renderTerms();
     if (!note) return;
     if ($("src").value.trim() && $("masked").dataset.plain) anonymize(note + " · "); else toast(note);
   }
   function addFromInput(raw) {
     const [cur, added] = mergedTerms(raw);
     $("termInput").value = "";
-    if (added.length) setTerms(cur, added.length === 1 ? t("t_term_added", { s: added[0] }) : t("t_terms_added_n", { n: added.length }));
+    if (added.length) setTerms(cur, addedNote(added));
   }
   $("btnAddTerm").onclick = () => addFromInput($("termInput").value);
   $("termInput").addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); addFromInput($("termInput").value); } });
@@ -1803,23 +1964,23 @@ const MaskBoardEngine = (function () {
   $("termList").addEventListener("click", e => {
     const b = e.target.closest("button.x");
     if (!b) return;
-    const term = m.customTerms[+b.dataset.i];
-    setTerms(m.customTerms.filter((_, i) => i !== +b.dataset.i), t("t_term_removed", { s: term }));
+    const terms = termsOf(curList), term = terms[+b.dataset.i];
+    setTerms(terms.filter((_, i) => i !== +b.dataset.i), t("t_term_removed", { s: term }));
   });
   $("termList").addEventListener("dblclick", e => {
     const li = e.target.closest("li"), b = li && li.querySelector("button.x");
     if (!b || e.target.closest("button.x")) return;
-    const i = +b.dataset.i, term = m.customTerms[i];
-    setTerms(m.customTerms.filter((_, k) => k !== i), null);
+    const terms = termsOf(curList), i = +b.dataset.i, term = terms[i];
+    setTerms(terms.filter((_, k) => k !== i), null);
     $("termInput").value = term; $("termInput").focus();
   });
   function addTerm(raw) {
     const term = E.normTerm(raw);
     if (!term) { toast(t("t_term_need")); return; }
-    if (E.isToken(term)) { toast(t("t_term_token")); return; }
+    if (E.isToken(term) || m._isTok(term)) { toast(t("t_term_token")); return; }
     const [cur, added] = mergedTerms(term);
-    if (added.length) { m.setCustom(cur); renderTerms(); }
-    const note = added.length ? t("t_term_added", { s: term }) : t("t_term_exists", { s: term });
+    if (added.length) { storeTerms(curList, cur); renderTerms(); }
+    const note = added.length ? addedNote(added) : t("t_term_exists", { s: term });
     if ($("src").value.trim()) anonymize(note + " · "); else toast(note);
   }
   const ctx = $("ctx");
@@ -1904,9 +2065,10 @@ const MaskBoardEngine = (function () {
     }
     empty.style.display = "none";
     body.innerHTML = rows.slice().reverse().map(e => {
-      const old = !E.isToken(e.fake) || /^(IP|IPV6|KULLANICI|PROJE|PAROLA|ANAHTAR|AYAR|OZEL|TARIH)_\d+$/.test(e.fake);
+      const old = !m._isTok(e.fake) || /^(IP|IPV6|KULLANICI|PROJE|PAROLA|ANAHTAR|AYAR|OZEL|TARIH)_\d+$/.test(e.fake);
       const cls = e.secret ? "tag secret" : old ? "tag old" : "tag";
-      const tag = shortLabel(e.type) + (old ? " · " + t("old") : "");
+      const own = e.type === "custom" && !old && !e.fake.startsWith("CUSTOM_") ? e.fake.slice(0, e.fake.lastIndexOf("_")) : null;
+      const tag = (own || shortLabel(e.type)) + (old ? " · " + t("old") : "");
       return `<tr><td><span class="${cls}">${esc(tag)}</span></td>` +
              (e.secret ? `<td class="c-secret" title="${esc(t("secret_hidden"))}">${MASK}</td>` : `<td class="c-real">${esc(e.real)}</td>`) +
              `<td class="c-fake">${esc(e.fake)}</td></tr>`;
@@ -1956,9 +2118,9 @@ const MaskBoardEngine = (function () {
         const d = JSON.parse(r.result);
         if (!Array.isArray(d.entries)) throw 0;
         const added = m.importEntries(d.entries);
-        if (Array.isArray(d.custom_terms) && d.custom_terms.length && !m.customTerms.length) {
-          m.setCustom(d.custom_terms); renderTerms();
-        }
+        if (Array.isArray(d.custom_terms)) m.setCustom(m.customTerms.concat(d.custom_terms));
+        if (Array.isArray(d.custom_lists)) m.setLists(m.customLists.concat(d.custom_lists));
+        renderTerms();
         renderLedger(); updateStatus(); checkSmart();
         toast(added ? t("t_imported", { n: added }) : t("t_import_none"));
       } catch (_) { toast(t("t_import_bad")); }
